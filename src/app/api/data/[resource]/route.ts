@@ -12,6 +12,7 @@ import {
   listResource,
   saveResource,
   removeResource,
+  archivePermission,
 } from "@/lib/modules/service";
 type Context = { params: Promise<{ resource: string }> };
 export async function GET(request: Request, { params }: Context) {
@@ -65,8 +66,7 @@ export async function DELETE(request: Request, { params }: Context) {
   try {
     verifyOrigin(request);
     const { resource } = await params;
-    const r = resourceFor(resource);
-    const ctx = await requireTenant(r.write);
+    const ctx = await requireTenant(archivePermission(resource));
     const { id } = z
       .object({ id: z.uuid() })
       .strict()

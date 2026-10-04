@@ -48,11 +48,11 @@ Webhooks são persistidos antes da resposta e processados em `after()`. Filas us
 
 Acesso depende exclusivamente da tabela privada `private.super_admins`, não do papel owner ou metadata de cadastro. Depois de confirmar o e-mail do administrador, o operador do banco pode inserir seu UUID nessa tabela. Essa operação não está exposta na aplicação. Não há promoção automática de quem se cadastra primeiro.
 
-`/master` oferece visão da plataforma, suspensão por motivo, auditoria e suporte somente para consulta, por sessão de 15 minutos. Remover uma suspensão administrativa não cria um período pago. MFA obrigatório e suporte com alteração operacional não estão implementados; manter acesso administrativo restrito até ampliar essa proteção.
+`/master` oferece visão da plataforma, suspensão por motivo, auditoria e suporte somente para consulta, por sessão de 15 minutos. Remover uma suspensão administrativa não cria um período pago. O Master exige sessão AAL2; `/master/seguranca` permite configurar e confirmar TOTP. Homologar recuperação de acesso com o operador do Supabase. Suporte com alteração operacional não é oferecido.
 
 ## Publicação
 
-Repositório público: https://github.com/pedizza/pedizza. Deploy com Vercel CLI autenticada, após `npm run check`. Configurar as variáveis no ambiente Production, definir `NEXT_PUBLIC_APP_URL` para o domínio real e publicar novamente quando variáveis públicas mudarem. Nunca copiar `.env.local` para o repositório.
+Repositório público: https://github.com/pedizza/pedizza. Site: https://pedizza.vercel.app. A publicação via CLI foi validada; a conexão automática GitHub→Vercel foi recusada pelo serviço e ainda precisa da autorização do app GitHub na Vercel. Deploy com Vercel CLI autenticada, após `npm run check`. Configurar as variáveis no ambiente Production, definir `NEXT_PUBLIC_APP_URL` para o domínio real e publicar novamente quando variáveis públicas mudarem. Nunca copiar `.env.local` para o repositório.
 
 Homologar callbacks, e-mail, pagamento, webhook, scheduler, mobile e impressão com dois tenants reais de teste antes de comercializar. Os textos de termos e privacidade estão marcados como rascunhos e precisam dos dados e regras reais do operador.
 

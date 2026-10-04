@@ -26,7 +26,12 @@ export function detectMedia(data: Buffer) {
     data.toString("ascii", 8, 12) === "WAVE"
   )
     return "audio/wav";
-  if (data.toString("ascii", 4, 8) === "ftyp") return "video/mp4";
+  if (data.subarray(0, 4).equals(Buffer.from([0x1a, 0x45, 0xdf, 0xa3])))
+    return "audio/webm";
+  if (data.toString("ascii", 4, 8) === "ftyp")
+    return data.toString("ascii", 8, 12).startsWith("M4A")
+      ? "audio/mp4"
+      : "video/mp4";
   return null;
 }
 export async function storeMedia(
@@ -35,12 +40,15 @@ export async function storeMedia(
   data: Buffer,
   name: string,
   imagesOnly = false,
+  declaredMime = "",
 ) {
   invariant(
     data.length > 0 && data.length <= (imagesOnly ? 4 : 20) * 1024 * 1024,
     "Arquivo fora do limite permitido.",
   );
   let mime = detectMedia(data);
+  if (mime === "video/mp4" && declaredMime.split(";")[0] === "audio/mp4")
+    mime = "audio/mp4";
   invariant(
     mime && (!imagesOnly || mime.startsWith("image/")),
     "Formato não suportado. Use JPG, PNG, WebP, PDF, MP3, OGG, WAV ou MP4.",
@@ -60,6 +68,8 @@ export async function storeMedia(
       "audio/mpeg": "mp3",
       "audio/ogg": "ogg",
       "audio/wav": "wav",
+      "audio/webm": "webm",
+      "audio/mp4": "m4a",
       "video/mp4": "mp4",
     } as Record<string, string>
   )[mime];

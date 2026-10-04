@@ -1,5 +1,7 @@
 # Pedizza
 
+Site de acompanhamento: https://pedizza.vercel.app · Local: http://localhost:3000
+
 Gestão multi-tenant para pizzarias: cardápio, entrega, pedidos via WhatsApp, atendimento, equipe, pagamentos e assinatura SaaS.
 
 **Estado:** implementação em validação. As telas públicas e os testes locais funcionam. Login, mídia, provedores e cobrança precisam das credenciais e da homologação descritas em [operação](docs/OPERACAO.md). Não usar para cobrar clientes antes de concluir essa homologação.

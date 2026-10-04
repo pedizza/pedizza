@@ -1,5 +1,7 @@
 # QA e estado de entrega
 
+Verificação local: lint e TypeScript sem erros, 19 testes de domínio/segurança/banco aprovados. Os 6 testes de navegador passaram em localhost e na publicação Vercel.
+
 ## Automatizado
 
 - Domínio: centavos/arredondamento, dois sabores, horário noturno, sobreposição semanal, transições, telefone e documentos.
@@ -32,8 +34,8 @@ Com as chaves configuradas, executar:
 ## Limites conhecidos desta versão
 
 - Cancelamento de recorrência BravoPay pelo painel ainda não implementado; depende do contrato/ID real do provider.
-- Master possui suporte de consulta e não impersonação com edição; MFA obrigatório ainda pendente.
-- Áudio é enviado por upload de arquivo; gravação pelo microfone no painel ainda não implementada.
+- Master possui suporte de consulta e não impersonação com edição; MFA/TOTP obrigatório implementado, ainda sem homologação com a conta real.
+- Gravação de áudio usa MediaRecorder, limite de 60 segundos/3 MB; precisa de homologação no browser e na versão instalada da Evolution.
 - Uploads do painel limitados a 3 MB. Não há importação em lote de cardápio nem antivírus de anexos.
 - Tabelas autenticadas e fluxos completos ainda precisam de teste visual com conta real; a inspeção visual feita cobre as telas públicas.
 - Cron diário sozinho não atende retentativas e alertas em tempo real; provisionar scheduler contínuo.

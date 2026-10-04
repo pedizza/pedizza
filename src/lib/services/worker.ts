@@ -394,6 +394,8 @@ async function processEvolution(job: Job) {
         record.conversationId,
         Buffer.from(remote.base64.replace(/^data:[^;]+;base64,/, ""), "base64"),
         remote.fileName || "Anexo",
+        false,
+        remote.mimetype,
       );
       await transaction((db) =>
         db.query(

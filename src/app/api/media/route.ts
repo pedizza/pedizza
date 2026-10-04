@@ -59,6 +59,8 @@ export async function POST(request: Request) {
       id,
       await boundedBody(request.body, 3 * 1024 * 1024),
       name,
+      false,
+      request.headers.get("content-type") || "",
     );
     stored = file.path;
     await transaction(async (db) => {

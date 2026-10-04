@@ -26,4 +26,4 @@ O audit inicial encontrou um advisory em `braces@3.0.3`, transitivo do ESLint/Ne
 
 ## Antes da abertura comercial
 
-Concluir testes com credenciais reais, política de retenção/backups, restauração, SMTP, MFA administrativo, scheduler contínuo, ciclo de cancelamento BravoPay, monitoramento e revisão dos documentos legais. Nenhuma dessas tarefas deve ser inferida como concluída apenas porque o build passou.
+Concluir testes com credenciais reais, política de retenção/backups, restauração, SMTP, homologação do MFA administrativo, scheduler contínuo, ciclo de cancelamento BravoPay, monitoramento e revisão dos documentos legais. Nenhuma dessas tarefas deve ser inferida como concluída apenas porque o build passou.

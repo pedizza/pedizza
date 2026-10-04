@@ -5,7 +5,7 @@ const client = new pg.Client({
   ssl: {
     rejectUnauthorized: true,
     ca: readFileSync(
-      process.env.SUPABASE_DB_CA_PATH || ".local/supabase-ca.crt",
+      process.env.SUPABASE_DB_CA_PATH || "config/supabase-ca.crt",
       "utf8",
     ),
   },

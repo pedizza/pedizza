@@ -1,5 +1,6 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { AudioRecorder } from "./audio-recorder";
 import { useSearchParams } from "next/navigation";
 import { Send, ArrowLeft } from "lucide-react";
 import type { Permission } from "@/lib/permissions";
@@ -376,6 +377,11 @@ export function Conversations({
                       }}
                     />
                   </label>
+                  <AudioRecorder
+                    key={selected}
+                    disabled={busy}
+                    onRecorded={upload}
+                  />
                   <textarea
                     aria-label="Sua mensagem"
                     placeholder="Digite uma mensagem. O envio pausa o assistente."

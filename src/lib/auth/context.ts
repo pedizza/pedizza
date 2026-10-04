@@ -117,7 +117,7 @@ export async function authorize(
   if (!allowInactive && !check.active)
     throw new AppError(402, "Sua assinatura precisa de atenção.");
 }
-export async function requireMaster() {
+export async function requireMaster(requireMfa = true) {
   const user = await getCurrentUser();
   if (!user) throw new AppError(401, "Entre na sua conta.");
   const result = await transaction(
@@ -126,5 +126,16 @@ export async function requireMaster() {
     user.id,
   );
   if (!result?.allowed) throw new AppError(403, "Acesso restrito.");
+  if (requireMfa) {
+    const client = await supabaseServer();
+    const { data, error } =
+      await client.auth.mfa.getAuthenticatorAssuranceLevel();
+    if (error || data?.currentLevel !== "aal2")
+      throw new AppError(
+        403,
+        "Confirme a autenticação de dois fatores.",
+        "MFA_REQUIRED",
+      );
+  }
   return user;
 }

@@ -20,9 +20,11 @@ type Row = Record<string, unknown> & { id: string; updated_at: string };
 export function ResourceManager({
   resourceKey,
   canEdit,
+  canArchive,
 }: {
   resourceKey: string;
   canEdit: boolean;
+  canArchive: boolean;
 }) {
   const resource = resources[resourceKey];
   const [data, setData] = useState<Row[]>([]),
@@ -351,14 +353,16 @@ export function ResourceManager({
                         <Copy size={15} />
                       </button>
                     )}
-                    <button
-                      className="icon-button"
-                      aria-label={`Remover ${label(row)}`}
-                      onClick={() => setRemove(row)}
-                    >
-                      <Archive size={15} />
-                    </button>
                   </>
+                )}
+                {canArchive && (
+                  <button
+                    className="icon-button"
+                    aria-label={`Remover ${label(row)}`}
+                    onClick={() => setRemove(row)}
+                  >
+                    <Archive size={15} />
+                  </button>
                 )}
               </div>
             </article>

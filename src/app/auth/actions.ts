@@ -75,6 +75,10 @@ export async function recover(
 ): Promise<AuthState> {
   const email = z.email().safeParse(form.get("email"));
   if (!email.success) return { error: "Informe um e-mail válido." };
+  if (!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)
+    return {
+      error: "O acesso está sendo configurado. Tente novamente em breve.",
+    };
   const client = await supabaseServer();
   await client.auth.resetPasswordForEmail(email.data, {
     redirectTo: appUrl() + "/auth/callback?next=/nova-senha",
@@ -91,6 +95,10 @@ export async function updatePassword(
   const password = z.string().min(8).max(128).safeParse(form.get("password"));
   if (!password.success)
     return { error: "Use uma senha de 8 a 128 caracteres." };
+  if (!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)
+    return {
+      error: "O acesso está sendo configurado. Tente novamente em breve.",
+    };
   const client = await supabaseServer();
   const { error } = await client.auth.updateUser({ password: password.data });
   if (error)
