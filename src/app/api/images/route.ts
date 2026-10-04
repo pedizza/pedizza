@@ -125,3 +125,32 @@ export async function POST(request: Request) {
     return apiError(e);
   }
 }
+
+export async function DELETE(request: Request) {
+  try {
+    verifyOrigin(request);
+    const { r, id } = input(request),
+      ctx = await requireTenant(r.write);
+    await rateLimit(ctx.userId + ":image-delete", 20);
+    const old = await transaction(async (db) => {
+      await authorize(db, ctx, r.write);
+      const record = await one<{ path: string | null }>(
+        db,
+        `select ${r.column} path from public.${r.table} where tenant_id=$1 and id=$2 for update`,
+        [ctx.tenantId, id],
+      );
+      invariant(record, "Registro não encontrado.", 404);
+      await db.query(
+        `update public.${r.table} set ${r.column}=null where tenant_id=$1 and id=$2`,
+        [ctx.tenantId, id],
+      );
+      await audit(db, ctx.tenantId, ctx.userId, "image.deleted", r.table, id);
+      return record.path;
+    });
+    if (old?.startsWith(ctx.tenantId + "/"))
+      await privateFiles().storage.from(r.bucket).remove([old]);
+    return json({ ok: true });
+  } catch (e) {
+    return apiError(e);
+  }
+}
