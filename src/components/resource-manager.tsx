@@ -15,6 +15,7 @@ import { ResponsiveModal } from "./ui/modal";
 import { ReferenceSelect } from "./reference-select";
 import { ImageUpload } from "./image-upload";
 import Link from "next/link";
+import type { ProductSize } from "@/lib/modules/product-sizes";
 import { EmptyState } from "./ui/states";
 type Row = Record<string, unknown> & { id: string; updated_at: string };
 export function ResourceManager({
@@ -27,6 +28,15 @@ export function ResourceManager({
   canArchive: boolean;
 }) {
   const resource = resources[resourceKey];
+  const [sizes, setSizes] = useState<
+    (ProductSize & { rowId: string; price: string })[]
+  >([]);
+  function updateSize(index: number, patch: Partial<(typeof sizes)[number]>) {
+    setSizes((current) =>
+      current.map((size, i) => (i === index ? { ...size, ...patch } : size)),
+    );
+    setDirty(true);
+  }
   const [data, setData] = useState<Row[]>([]),
     [total, setTotal] = useState(0),
     [page, setPage] = useState(1),
@@ -101,6 +111,13 @@ export function ResourceManager({
     return () => clearTimeout(t);
   }, [toast]);
   function edit(row: Row | null) {
+    setSizes(
+      ((row?.sizes || []) as ProductSize[]).map((size) => ({
+        ...size,
+        rowId: crypto.randomUUID(),
+        price: (size.price_cents / 100).toFixed(2).replace(".", ","),
+      })),
+    );
     setEditing(row);
     setDirty(false);
     setOpen(true);
@@ -141,6 +158,14 @@ export function ResourceManager({
                 : ["date", "datetime-local"].includes(f.type || "") && !raw
                   ? null
                   : raw;
+      }
+      if (resourceKey === "produtos") {
+        payload.sizes = sizes.map((size) => ({
+          name: size.name,
+          slices: size.slices,
+          max_flavors: size.max_flavors,
+          price_cents: parseCurrency(size.price),
+        }));
       }
       const r = await fetch(`/api/data/${resourceKey}`, {
         method: "POST",
@@ -401,90 +426,206 @@ export function ResourceManager({
       >
         <form onSubmit={save} onChange={() => setDirty(true)} className="stack">
           <div className="form-grid">
-            {resource.fields.map((f) => (
-              <label
-                key={f.key}
-                className={
-                  f.type === "textarea"
-                    ? "full"
-                    : f.type === "checkbox"
-                      ? "checkbox-label"
-                      : ""
-                }
-              >
-                {f.type === "checkbox" ? (
-                  <>
-                    <input
-                      type="checkbox"
-                      name={f.key}
-                      defaultChecked={Boolean(value(f))}
-                    />
-                    {f.label}
-                  </>
-                ) : (
-                  <>
-                    {f.label}
-                    {f.required ? " *" : ""}
-                    {f.type === "textarea" ? (
-                      <textarea
-                        name={f.key}
-                        defaultValue={String(value(f))}
-                        maxLength={2000}
-                      />
-                    ) : f.reference ? (
-                      <ReferenceSelect
-                        resource={f.reference}
-                        name={f.key}
-                        initialValue={String(value(f))}
-                        required={f.required}
-                      />
-                    ) : f.type === "select" ? (
-                      <select
-                        name={f.key}
-                        defaultValue={String(value(f))}
-                        required={f.required}
-                      >
-                        <option value="">Selecione</option>
-                        {f.reference
-                          ? (options[f.key] || []).map((o) => (
-                              <option value={o.id} key={o.id}>
-                                {String(
-                                  o.name || o.code || o.display_name || o.id,
-                                )}
-                              </option>
-                            ))
-                          : f.options?.map((o) => (
-                              <option key={o.value} value={o.value}>
-                                {f.key === "day_of_week"
-                                  ? [
-                                      "Domingo",
-                                      "Segunda",
-                                      "Terça",
-                                      "Quarta",
-                                      "Quinta",
-                                      "Sexta",
-                                      "Sábado",
-                                    ][Number(o.value)]
-                                  : optionLabels[o.value] || o.label}
-                              </option>
-                            ))}
-                      </select>
-                    ) : (
+            {resource.fields
+              .filter(
+                (f) =>
+                  !(
+                    resourceKey === "produtos" &&
+                    sizes.length > 0 &&
+                    f.key === "base_price_cents"
+                  ),
+              )
+              .map((f) => (
+                <label
+                  key={f.key}
+                  className={
+                    f.type === "textarea"
+                      ? "full"
+                      : f.type === "checkbox"
+                        ? "checkbox-label"
+                        : ""
+                  }
+                >
+                  {f.type === "checkbox" ? (
+                    <>
                       <input
-                        type={f.type === "money" ? "text" : f.type || "text"}
+                        type="checkbox"
                         name={f.key}
-                        defaultValue={String(value(f))}
-                        required={f.required}
-                        inputMode={f.type === "money" ? "decimal" : undefined}
-                        min={f.type === "number" ? 0 : undefined}
-                        maxLength={254}
+                        defaultChecked={Boolean(value(f))}
                       />
-                    )}
-                  </>
-                )}
-              </label>
-            ))}
+                      {f.label}
+                    </>
+                  ) : (
+                    <>
+                      {f.label}
+                      {f.required ? " *" : ""}
+                      {f.type === "textarea" ? (
+                        <textarea
+                          name={f.key}
+                          defaultValue={String(value(f))}
+                          maxLength={2000}
+                        />
+                      ) : f.reference ? (
+                        <ReferenceSelect
+                          resource={f.reference}
+                          name={f.key}
+                          initialValue={String(value(f))}
+                          required={f.required}
+                        />
+                      ) : f.type === "select" ? (
+                        <select
+                          name={f.key}
+                          defaultValue={String(value(f))}
+                          required={f.required}
+                        >
+                          <option value="">Selecione</option>
+                          {f.reference
+                            ? (options[f.key] || []).map((o) => (
+                                <option value={o.id} key={o.id}>
+                                  {String(
+                                    o.name || o.code || o.display_name || o.id,
+                                  )}
+                                </option>
+                              ))
+                            : f.options?.map((o) => (
+                                <option key={o.value} value={o.value}>
+                                  {f.key === "day_of_week"
+                                    ? [
+                                        "Domingo",
+                                        "Segunda",
+                                        "Terça",
+                                        "Quarta",
+                                        "Quinta",
+                                        "Sexta",
+                                        "Sábado",
+                                      ][Number(o.value)]
+                                    : optionLabels[o.value] || o.label}
+                                </option>
+                              ))}
+                        </select>
+                      ) : (
+                        <input
+                          type={f.type === "money" ? "text" : f.type || "text"}
+                          name={f.key}
+                          defaultValue={String(value(f))}
+                          required={f.required}
+                          inputMode={f.type === "money" ? "decimal" : undefined}
+                          min={f.type === "number" ? 0 : undefined}
+                          maxLength={254}
+                        />
+                      )}
+                    </>
+                  )}
+                </label>
+              ))}
           </div>
+          {resourceKey === "produtos" && (
+            <fieldset
+              className="stack"
+              style={{
+                border: "1px solid var(--border)",
+                borderRadius: 12,
+                padding: 16,
+                minWidth: 0,
+              }}
+            >
+              <legend>Tamanhos e preços</legend>
+              <small>
+                Adicione os tamanhos vendidos para este produto. Sem tamanhos,
+                informe o preço simples.
+              </small>
+              {sizes.map((size, index) => (
+                <div key={size.rowId} className="form-grid">
+                  <label>
+                    Nome do tamanho
+                    <input
+                      required
+                      maxLength={80}
+                      value={size.name}
+                      onChange={(e) =>
+                        updateSize(index, { name: e.target.value })
+                      }
+                      placeholder="Ex.: Grande"
+                    />
+                  </label>
+                  <label>
+                    Preço do tamanho
+                    <input
+                      required
+                      inputMode="decimal"
+                      value={size.price}
+                      onChange={(e) =>
+                        updateSize(index, { price: e.target.value })
+                      }
+                      placeholder="0,00"
+                    />
+                  </label>
+                  <label>
+                    Fatias (opcional)
+                    <input
+                      type="number"
+                      min={1}
+                      max={24}
+                      value={size.slices ?? ""}
+                      onChange={(e) =>
+                        updateSize(index, {
+                          slices: e.target.value
+                            ? Number(e.target.value)
+                            : null,
+                        })
+                      }
+                    />
+                  </label>
+                  <label>
+                    Máximo de sabores
+                    <select
+                      value={size.max_flavors}
+                      onChange={(e) =>
+                        updateSize(index, {
+                          max_flavors: Number(e.target.value),
+                        })
+                      }
+                    >
+                      <option value={1}>1 sabor</option>
+                      <option value={2}>2 sabores</option>
+                    </select>
+                  </label>
+                  <button
+                    type="button"
+                    className="btn ghost small"
+                    onClick={() => {
+                      setSizes((current) =>
+                        current.filter((_, i) => i !== index),
+                      );
+                      setDirty(true);
+                    }}
+                  >
+                    Remover tamanho
+                  </button>
+                </div>
+              ))}
+              <button
+                type="button"
+                className="btn secondary"
+                onClick={() => {
+                  setSizes((current) => [
+                    ...current,
+                    {
+                      rowId: crypto.randomUUID(),
+                      name: "",
+                      price: "",
+                      price_cents: 0,
+                      slices: null,
+                      max_flavors: 1,
+                    },
+                  ]);
+                  setDirty(true);
+                }}
+              >
+                Adicionar tamanho
+              </button>
+            </fieldset>
+          )}
           {error && (
             <p className="feedback" role="alert">
               {error}

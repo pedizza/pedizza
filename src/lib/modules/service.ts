@@ -1,4 +1,5 @@
 import "server-only";
+import { productSizesSchema } from "./product-sizes";
 import { Temporal } from "@js-temporal/polyfill";
 import { resources, resourceSchema } from "./registry";
 import { transaction, rows, one, type DB } from "@/lib/db";
@@ -52,6 +53,37 @@ export async function listResource(
       `select ${cols.join(",")} from public.${r.table} where ${where} order by created_at desc,id limit 20 offset $${params.length}`,
       params,
     );
+    if (key === "produtos" && data.length) {
+      const prices = await rows<{
+        item_id: string;
+        name: string;
+        price_cents: number;
+        slices: number | null;
+        max_flavors: number;
+      }>(
+        db,
+        "select p.item_id,s.name,p.price_cents,s.slices,s.max_flavors from public.menu_item_prices p join public.menu_sizes s on s.tenant_id=p.tenant_id and s.id=p.size_id where p.tenant_id=$1 and p.item_id=any($2::uuid[]) and p.active and s.archived_at is null order by s.sort_order,s.name",
+        [ctx.tenantId, data.map((row) => row.id)],
+      );
+      for (const row of data)
+        row.sizes = prices
+          .filter((p) => p.item_id === row.id)
+          .map((p) => ({
+            name: p.name,
+            price_cents: p.price_cents,
+            slices: p.slices,
+            max_flavors: p.max_flavors,
+          }));
+    }
+    if (key === "borda-categorias" && data.length) {
+      const labels = await rows<{ id: string; name: string }>(
+        db,
+        "select x.id,b.name || ' → ' || c.name as name from public.menu_border_categories x join public.menu_borders b on b.tenant_id=x.tenant_id and b.id=x.border_id join public.menu_categories c on c.tenant_id=x.tenant_id and c.id=x.category_id where x.tenant_id=$1 and x.id=any($2::uuid[])",
+        [ctx.tenantId, data.map((row) => row.id)],
+      );
+      for (const row of data)
+        row.name = labels.find((label) => label.id === row.id)?.name;
+    }
     const dates = r.fields.filter((f) => f.type === "datetime-local");
     if (dates.length) {
       const setting = await one<{ timezone: string }>(
@@ -142,7 +174,19 @@ export async function saveResource(
   expectedUpdatedAt?: string,
 ) {
   const r = resourceFor(key);
+  let sizes: ReturnType<typeof productSizesSchema.parse> | undefined;
+  if (key === "produtos" && raw && typeof raw === "object" && "sizes" in raw) {
+    const { sizes: inputSizes, ...fields } = raw;
+    sizes = productSizesSchema.parse(inputSizes);
+    raw = fields;
+  }
   const data: Record<string, unknown> = resourceSchema(r).parse(raw);
+  if (sizes?.length) data.base_price_cents = null;
+  if (sizes !== undefined && !sizes.length)
+    invariant(
+      data.base_price_cents != null,
+      "Informe o preço simples ou adicione tamanhos e preços.",
+    );
   if (key === "clientes") data.phone = normalizePhone(String(data.phone));
   for (const field of ["cpf", "cnpj", "postal_code"])
     if (typeof data[field] === "string")
@@ -236,6 +280,57 @@ export async function saveResource(
       "O registro mudou ou não está disponível. Atualize a página.",
       409,
     );
+    if (key === "produtos" && sizes !== undefined) {
+      const category = await one(
+        db,
+        "select id from public.menu_categories where tenant_id=$1 and id=$2 and archived_at is null",
+        [ctx.tenantId, data.category_id],
+      );
+      invariant(category, "Selecione uma categoria disponível.");
+      await db.query(
+        "delete from public.menu_item_prices where tenant_id=$1 and item_id=$2",
+        [ctx.tenantId, result.id],
+      );
+      for (const size of sizes) {
+        let existing = await one<{
+          id: string;
+          slices: number | null;
+          max_flavors: number;
+        }>(
+          db,
+          "select id,slices,max_flavors from public.menu_sizes where tenant_id=$1 and category_id=$2 and lower(name)=lower($3) and archived_at is null order by created_at limit 1",
+          [ctx.tenantId, data.category_id, size.name],
+        );
+        if (existing) {
+          invariant(
+            existing.slices === size.slices &&
+              existing.max_flavors === size.max_flavors,
+            `O tamanho ${size.name} já existe nesta categoria. Use ${existing.slices ?? "nenhuma"} fatias e ${existing.max_flavors} sabor(es).`,
+          );
+        } else {
+          existing = await one(
+            db,
+            "insert into public.menu_sizes(tenant_id,category_id,name,slices,max_flavors) values($1,$2,$3,$4,$5) returning id,slices,max_flavors",
+            [
+              ctx.tenantId,
+              data.category_id,
+              size.name,
+              size.slices,
+              size.max_flavors,
+            ],
+          );
+        }
+        await db.query(
+          "insert into public.menu_item_prices(tenant_id,item_id,size_id,price_cents,active) values($1,$2,$3,$4,true) on conflict(tenant_id,item_id,size_id) do update set price_cents=excluded.price_cents,active=true",
+          [ctx.tenantId, result.id, existing!.id, size.price_cents],
+        );
+      }
+    }
+    if (key === "bordas")
+      await db.query(
+        "delete from public.menu_border_prices where tenant_id=$1 and border_id=$2",
+        [ctx.tenantId, result.id],
+      );
     await audit(
       db,
       ctx.tenantId,

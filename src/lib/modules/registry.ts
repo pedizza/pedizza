@@ -393,8 +393,14 @@ export const resources: Record<string, Resource> = {
     fields: [
       { key: "name", label: "Nome", type: "text", required: true },
       {
+        key: "description",
+        label: "Descrição",
+        type: "textarea",
+        required: false,
+      },
+      {
         key: "base_price_cents",
-        label: "Preço padrão",
+        label: "Preço",
         type: "money",
         required: true,
       },
