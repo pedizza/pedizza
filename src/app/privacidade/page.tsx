@@ -1,4 +1,7 @@
+import type { Metadata } from "next";
 import Link from "next/link";
+export const metadata: Metadata = { alternates: { canonical: "/privacidade" } };
+
 export default function Page() {
   return (
     <main className="card" style={{ maxWidth: 700, margin: "60px auto" }}>

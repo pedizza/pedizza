@@ -61,3 +61,9 @@ Repositório público: https://github.com/pedizza/pedizza. Site: https://pedizza
 Homologar callbacks, e-mail, pagamento, webhook, scheduler, mobile e impressão com dois tenants reais de teste antes de comercializar. Os textos de termos e privacidade estão marcados como rascunhos e precisam dos dados e regras reais do operador.
 
 Referências de contrato: [Evolution API](https://github.com/evolution-foundation/evolution-api), [Geoapify](https://apidocs.geoapify.com/), [Mercado Pago](https://www.mercadopago.com.br/developers/pt/docs), [BravoPay](https://www.bravopay.club/docs), [OpenAI Structured Outputs](https://developers.openai.com/api/docs/guides/structured-outputs).
+
+## Domínio de produção
+
+Endereço canônico: `https://www.pedizza.com.br`. Na produção, `NEXT_PUBLIC_APP_URL` deve usar esse endereço para links de autenticação e convites. O `.env.local` de desenvolvimento continua usando localhost. Páginas acessadas pelo domínio `pedizza.vercel.app` redirecionam ao canônico; `/api/*` permanece acessível diretamente, sem redirecionar callbacks.
+
+Cadastrar na BravoPay → Integrações a URL `https://pedizza.vercel.app/api/webhooks/bravopay`. Salvar o segredo `whsec_...` gerado pela BravoPay em `BRAVOPAY_WEBHOOK_SECRET` e replicá-lo na Vercel antes de testar entregas. Não gerar um segredo diferente no Pedizza.

@@ -1,6 +1,22 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 export async function proxy(request: NextRequest) {
+  // Redirect browser pages only; provider callbacks must keep their original URL.
+  if (
+    process.env.NODE_ENV === "production" &&
+    ["pedizza.vercel.app", "pedizza.com.br"].includes(
+      request.nextUrl.hostname,
+    ) &&
+    ["GET", "HEAD"].includes(request.method) &&
+    !request.nextUrl.pathname.startsWith("/api/") &&
+    request.nextUrl.pathname !== "/api"
+  ) {
+    const canonical = new URL(
+      request.nextUrl.pathname + request.nextUrl.search,
+      "https://www.pedizza.com.br",
+    );
+    return NextResponse.redirect(canonical, 308);
+  }
   const nonce = Buffer.from(crypto.randomUUID()).toString("base64");
   const dev = process.env.NODE_ENV !== "production";
   const csp = `default-src 'self'; script-src 'self' 'nonce-${nonce}' 'strict-dynamic' ${dev ? "'unsafe-eval'" : ""}; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: ; font-src 'self'; connect-src 'self'   ${dev ? "ws:" : ""}; media-src 'self' blob: ; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none';`;

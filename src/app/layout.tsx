@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { headers } from "next/headers";
 export const metadata: Metadata = {
+  metadataBase: new URL("https://www.pedizza.com.br"),
   title: {
     default: "Pedizza — Sua pizzaria, organizada",
     template: "%s | Pedizza",
