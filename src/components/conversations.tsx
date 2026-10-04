@@ -45,7 +45,10 @@ export function Conversations({
     [hasMore, setHasMore] = useState(false),
     [text, setText] = useState(""),
     [busy, setBusy] = useState(false),
-    [error, setError] = useState("");
+    [error, setError] = useState(""),
+    [listError, setListError] = useState(""),
+    [detailError, setDetailError] = useState(""),
+    [listLoaded, setListLoaded] = useState(false);
   const messageKey = useRef(crypto.randomUUID());
   const loadList = useCallback(
     () =>
@@ -57,8 +60,16 @@ export function Conversations({
           if (!r.ok) throw Error(b.error);
           setList(b.data);
           setTotal(b.total);
+          setListLoaded(true);
+          setListError("");
         })
-        .catch((e) => setError(e.message)),
+        .catch((e) =>
+          setListError(
+            e instanceof TypeError
+              ? "Não foi possível carregar as conversas. Verifique sua conexão e tente novamente."
+              : e.message,
+          ),
+        ),
     [q, status, page],
   );
   const loadDetail = useCallback(() => {
@@ -70,8 +81,15 @@ export function Conversations({
         setDetail(b.conversation);
         setMessages(b.messages);
         setHasMore(b.hasMore);
+        setDetailError("");
       })
-      .catch((e) => setError(e.message));
+      .catch((e) =>
+        setDetailError(
+          e instanceof TypeError
+            ? "Não foi possível carregar as mensagens. Verifique sua conexão e tente novamente."
+            : e.message,
+        ),
+      );
   }, [selected, historyPage]);
   useEffect(() => {
     const timer = setTimeout(() => void loadList(), 200);
@@ -151,6 +169,17 @@ export function Conversations({
           {error}
         </p>
       )}
+      {(listError || detailError) && (
+        <div className="alert error" role="alert">
+          <p>{listError || detailError}</p>
+          <button
+            className="btn ghost small"
+            onClick={() => void Promise.all([loadList(), loadDetail()])}
+          >
+            Tentar novamente
+          </button>
+        </div>
+      )}
       <div className={`conversation-layout ${selected ? "has-selection" : ""}`}>
         <aside className="conversation-list card">
           <div className="stack" style={{ padding: 16 }}>
@@ -178,7 +207,12 @@ export function Conversations({
               <option value="closed">Finalizadas</option>
             </select>
           </div>
-          {list.length === 0 && (
+          {!listLoaded && !listError && (
+            <p role="status" style={{ padding: 16 }}>
+              Carregando conversas…
+            </p>
+          )}
+          {listLoaded && !listError && list.length === 0 && (
             <EmptyState
               title="Nenhuma conversa"
               description="Mensagens recebidas pelo WhatsApp aparecerão aqui."
