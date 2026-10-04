@@ -5,10 +5,7 @@ import { transaction, one, rows } from "@/lib/db";
 import { privateFiles } from "@/lib/services/files";
 import { storeMedia } from "./media";
 import { sendText, sendMedia, mediaBase64 } from "@/lib/integrations/evolution";
-import {
-  createOrderPix,
-  reconcileMpPayment,
-} from "@/lib/integrations/mercado-pago";
+import { reconcileMpPayment } from "@/lib/integrations/mercado-pago";
 import { reconcileBravoTransaction } from "@/lib/integrations/bravopay";
 import { processBotMessage } from "./chatbot";
 import { notify, enqueue } from "./events";
@@ -58,8 +55,7 @@ export async function processOutbox(limit = 8) {
     try {
       if (job.kind === "message") await dispatchMessage(job);
       else if (job.kind === "payment") {
-        const p = z.object({ orderId: z.uuid() }).parse(job.payload);
-        await createOrderPix(job.tenant_id, p.orderId);
+        throw new AppError(410, "PIX automático desativado.");
       } else if (job.kind === "push") await dispatchPush(job);
       else throw new Error("Unknown job");
       await complete("outbox", job.id);

@@ -158,7 +158,10 @@ export async function finalizeCart(
     "select id,type,name,requires_manual_confirmation from public.payment_methods where tenant_id=$1 and id=$2 and active and archived_at is null",
     [tenant, cart.payment_method_id],
   );
-  invariant(method, "Escolha uma forma de pagamento disponível.");
+  invariant(
+    method && method.type !== "pix_mercado_pago",
+    "Escolha uma forma de pagamento disponível.",
+  );
   const customer = await one<{ name: string; phone: string }>(
     db,
     "select name,phone from public.customers where tenant_id=$1 and id=$2 and active and not blocked and archived_at is null",

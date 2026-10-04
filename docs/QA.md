@@ -42,3 +42,5 @@ Com as chaves configuradas, executar:
 - Nenhuma cobrança ou mensagem externa foi disparada durante a implementação.
 
 Autenticação própria: testados login Torre, exibição vitalícia, negação ao Master, cookie HttpOnly e revogação de sessão após logout. Login do administrador encaminha para TOTP; o fator deve ser configurado pelo próprio administrador.
+
+Mercado Pago desativado: não é mais pendência para esta versão. Validar somente PIX manual, dinheiro, maquininha e formas personalizadas nos pedidos. A cobrança BravoPay continua independente.

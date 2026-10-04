@@ -24,11 +24,11 @@ Homologar contra a versão exata instalada: criação, QR, reconexão, envio, re
 
 ViaCEP não requer chave. `GEOAPIFY_API_KEY` permite geocodificação e distância de rota rodoviária. Preencher o endereço completo da loja. Não há distância aproximada por linha reta. Endereço ambíguo ou rota indisponível bloqueiam a cotação e permitem chamar um atendente. Configurar cobrança por bairro **ou** faixas de distância. O painel tem um simulador de endereço/taxa.
 
-## Mercado Pago — pedidos dos consumidores
+## Pagamentos dos pedidos
 
-Preencher `MERCADO_PAGO_CLIENT_ID`, `MERCADO_PAGO_CLIENT_SECRET`, `MERCADO_PAGO_WEBHOOK_SECRET` e `INTEGRATION_ENCRYPTION_KEY` (32 bytes aleatórios em Base64). Cadastrar redirect URI `https://SEU_DOMINIO/api/integrations/mercado-pago/callback`. Cada pizzaria conecta sua própria conta em Configurações → Pagamentos. O webhook é `/api/webhooks/mercado-pago`.
+Mercado Pago está desativado por decisão do produto. A loja utiliza PIX manual, dinheiro, cartões na maquininha e formas personalizadas. Configure a chave PIX nas formas de pagamento e confirme o recebimento manualmente. Nenhuma credencial Mercado Pago é necessária no `.env`.
 
-A geração do PIX exige e-mail do consumidor. O valor vem do pedido validado em centavos; a chave de idempotência é o ID do pedido. O webhook valida assinatura, consulta a transação no provider e compara valor e referência. Não usar a conta da plataforma para recebimentos de todas as lojas.
+Conexão OAuth e geração de novos PIX automáticos estão bloqueadas. Métodos antigos foram desativados/arquivados, preservando pedidos e pagamentos históricos. A assinatura SaaS BravoPay permanece separada.
 
 ## BravoPay — assinatura do Pedizza
 

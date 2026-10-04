@@ -568,7 +568,6 @@ export const resources: Record<string, Resource> = {
         default: "custom_manual",
         options: [
           { value: "cash", label: "cash" },
-          { value: "pix_mercado_pago", label: "pix_mercado_pago" },
           { value: "pix_manual", label: "pix_manual" },
           { value: "credit_on_delivery", label: "credit_on_delivery" },
           { value: "debit_on_delivery", label: "debit_on_delivery" },
@@ -1035,8 +1034,8 @@ export const optionLabels: Record<string, string> = {
   cash: "Dinheiro",
   pix_mercado_pago: "PIX Mercado Pago",
   pix_manual: "PIX manual",
-  credit_on_delivery: "Crédito na entrega",
-  debit_on_delivery: "Débito na entrega",
+  credit_on_delivery: "Cartão de crédito — maquininha",
+  debit_on_delivery: "Cartão de débito — maquininha",
   custom_manual: "Personalizada",
   percentage: "Percentual",
   fixed: "Fixo",

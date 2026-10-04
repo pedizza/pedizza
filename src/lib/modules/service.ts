@@ -119,15 +119,6 @@ async function validateRelations(
   if (key === "pagamentos") {
     if (data.active && data.type === "pix_manual")
       invariant(String(data.pix_key).trim(), "Informe a chave PIX.");
-    if (data.active && data.type === "pix_mercado_pago")
-      invariant(
-        await one(
-          db,
-          "select tenant_id from private.integration_credentials where tenant_id=$1 and provider='mercado_pago'",
-          [tenant],
-        ),
-        "Conecte sua conta Mercado Pago antes de ativar o PIX.",
-      );
     if (data.active === false && id) {
       const active = await one(
         db,

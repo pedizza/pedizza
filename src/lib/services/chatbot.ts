@@ -248,7 +248,7 @@ export async function processBotMessage(
       }
       if (kind === "payment")
         sql =
-          "select id,name from public.payment_methods where tenant_id=$1 and active and archived_at is null order by sort_order,id limit 8 offset $2";
+          "select id,name from public.payment_methods where tenant_id=$1 and active and type<>'pix_mercado_pago' and archived_at is null order by sort_order,id limit 8 offset $2";
       params.push(context.page * 8);
       context.options = await rows<{ id: string; name: string }>(
         db,
@@ -785,7 +785,7 @@ export async function processBotMessage(
           }
           const method = await one<{ type: string; name: string }>(
             db,
-            "select type,name from public.payment_methods where tenant_id=$1 and id=$2 and active",
+            "select type,name from public.payment_methods where tenant_id=$1 and id=$2 and active and type<>'pix_mercado_pago'",
             [tenant, selected()!.id],
           );
           invariant(method, "Forma de pagamento indisponível.");
