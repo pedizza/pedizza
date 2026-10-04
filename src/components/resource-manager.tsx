@@ -28,6 +28,10 @@ export function ResourceManager({
   canArchive: boolean;
 }) {
   const resource = resources[resourceKey];
+  const [category, setCategory] = useState("");
+  const [categories, setCategories] = useState<{ id: string; name: string }[]>(
+    [],
+  );
   const [sizes, setSizes] = useState<
     (ProductSize & { rowId: string; price: string })[]
   >([]);
@@ -54,7 +58,7 @@ export function ResourceManager({
   const load = useCallback(
     (signal?: AbortSignal) =>
       fetch(
-        `/api/data/${resourceKey}?page=${page}&q=${encodeURIComponent(search)}`,
+        `/api/data/${resourceKey}?page=${page}&q=${encodeURIComponent(search)}&category=${category}`,
         { signal },
       )
         .then(async (r) => {
@@ -64,6 +68,7 @@ export function ResourceManager({
         })
         .then((body) => {
           setData(body.data);
+          if (body.categories) setCategories(body.categories);
           setTotal(body.total);
           setError("");
         })
@@ -72,7 +77,7 @@ export function ResourceManager({
             setError(e.message);
         })
         .finally(() => setLoading(false)),
-    [resourceKey, page, search],
+    [resourceKey, page, search, category],
   );
   useEffect(() => {
     const c = new AbortController();
@@ -267,6 +272,26 @@ export function ResourceManager({
           </small>
         </div>
       )}
+      {resourceKey === "produtos" && (
+        <label className="product-category-filter">
+          Categoria
+          <select
+            value={category}
+            onChange={(e) => {
+              setCategory(e.target.value);
+              setPage(1);
+              setLoading(true);
+            }}
+          >
+            <option value="">Todas as categorias</option>
+            {categories.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
       {resource.search && (
         <form
           className="search"
@@ -332,10 +357,33 @@ export function ResourceManager({
         </div>
       ) : (
         <div className="data-list">
+          {resourceKey === "produtos" && (
+            <div className="product-list-head" aria-hidden="true">
+              <span>Imagem</span>
+              <span>Produto</span>
+              <span>Tamanho e preço</span>
+              <span>Ações</span>
+            </div>
+          )}
           {data.map((row) => (
-            <article className="data-row" key={row.id}>
+            <article
+              className={`data-row ${resourceKey === "produtos" ? "product-row" : ""}`}
+              key={row.id}
+            >
+              {resourceKey === "produtos" && (
+                <div className="product-image">
+                  <ImageUpload
+                    resource={resourceKey}
+                    id={row.id}
+                    hasImage={!!row.image_path}
+                    canEdit={canEdit}
+                    onSaved={() => void load()}
+                    compact
+                  />
+                </div>
+              )}
               <div className="detail">
-                {["produtos", "categorias"].includes(resourceKey) && (
+                {resourceKey === "categorias" && (
                   <ImageUpload
                     resource={resourceKey}
                     id={row.id}
@@ -351,6 +399,14 @@ export function ResourceManager({
                     label(row)
                   )}
                 </h3>
+                {resourceKey === "produtos" && (
+                  <>
+                    <span className="product-category">
+                      {String(row.category_name || "")}
+                    </span>
+                    <p>{String(row.description || "")}</p>
+                  </>
+                )}
                 {resourceKey === "regras-precos" && (
                   <span className={`badge ${row.allow_split ? "green" : ""}`}>
                     {row.allow_split
@@ -358,29 +414,59 @@ export function ResourceManager({
                       : "Somente um sabor"}
                   </span>
                 )}
-                <p>
-                  {resource.fields
-                    .filter(
-                      (f) =>
-                        f.key !== "name" &&
-                        f.key !== "description" &&
-                        f.key !== "active" &&
-                        f.key !== "blocked" &&
-                        !f.reference &&
-                        row[f.key] != null &&
-                        row[f.key] !== "" &&
-                        f.type !== "checkbox",
-                    )
-                    .slice(0, 3)
-                    .map((f) =>
-                      f.type === "money"
-                        ? formatCurrency(Number(row[f.key]))
-                        : optionLabels[String(row[f.key])] ||
-                          String(row[f.key]),
-                    )
-                    .join(" · ")}
-                </p>
+                {resourceKey !== "produtos" && (
+                  <p>
+                    {resource.fields
+                      .filter(
+                        (f) =>
+                          f.key !== "name" &&
+                          f.key !== "description" &&
+                          f.key !== "active" &&
+                          f.key !== "blocked" &&
+                          !f.reference &&
+                          row[f.key] != null &&
+                          row[f.key] !== "" &&
+                          f.type !== "checkbox",
+                      )
+                      .slice(0, 3)
+                      .map((f) =>
+                        f.type === "money"
+                          ? formatCurrency(Number(row[f.key]))
+                          : optionLabels[String(row[f.key])] ||
+                            String(row[f.key]),
+                      )
+                      .join(" · ")}
+                  </p>
+                )}
               </div>
+              {resourceKey === "produtos" && (
+                <table
+                  className="product-prices"
+                  aria-label={`Tamanhos e preços de ${label(row)}`}
+                >
+                  <thead>
+                    <tr>
+                      <th>Tamanho</th>
+                      <th>Preço</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {((row.sizes as ProductSize[])?.length
+                      ? (row.sizes as ProductSize[])
+                      : [{ name: "Único", price_cents: row.base_price_cents }]
+                    ).map((size, i) => (
+                      <tr key={i}>
+                        <td>{size.name}</td>
+                        <td>
+                          {size.price_cents == null
+                            ? "Não definido"
+                            : formatCurrency(Number(size.price_cents))}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
               <div className="actions">
                 {"active" in row && (
                   <span className={`badge ${row.active ? "green" : ""}`}>

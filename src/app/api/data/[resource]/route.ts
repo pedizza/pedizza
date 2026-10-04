@@ -36,6 +36,9 @@ export async function GET(request: Request, { params }: Context) {
         url.searchParams.get("id")
           ? z.uuid().parse(url.searchParams.get("id"))
           : undefined,
+        url.searchParams.get("category")
+          ? z.uuid().parse(url.searchParams.get("category"))
+          : undefined,
       ),
     );
   } catch (e) {

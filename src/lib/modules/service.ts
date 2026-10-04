@@ -23,6 +23,7 @@ export async function listResource(
   page = 1,
   search = "",
   id?: string,
+  categoryId?: string,
 ) {
   const r = resourceFor(key);
   invariant(ctx.permissions.includes(r.read), "Sem permissão.", 403);
@@ -48,6 +49,10 @@ export async function listResource(
       params.push("%" + search.replace(/[%_\\]/g, "\$&") + "%");
       where += ` and ${r.search} ilike $${params.length}`;
     }
+    if (key === "produtos" && categoryId) {
+      params.push(categoryId);
+      where += ` and category_id=$${params.length}`;
+    }
     const count = await one<{ total: number }>(
       db,
       `select count(*)::int total from public.${r.table} where ${where}`,
@@ -56,7 +61,7 @@ export async function listResource(
     params.push(offset);
     const data = await rows<DataRow>(
       db,
-      `select ${cols.join(",")} from public.${r.table} where ${where} order by created_at desc,id limit 20 offset $${params.length}`,
+      `select ${cols.join(",")} from public.${r.table} where ${where} order by ${["produtos", "categorias"].includes(key) ? "sort_order,name,id" : "created_at desc,id"} limit 20 offset $${params.length}`,
       params,
     );
     if (key === "produtos" && data.length) {
@@ -111,7 +116,25 @@ export async function listResource(
               .slice(0, 16);
         }
     }
-    return { data, total: count?.total || 0, page };
+    const categories =
+      key === "produtos"
+        ? await rows<{ id: string; name: string }>(
+            db,
+            "select id,name from public.menu_categories where tenant_id=$1 and archived_at is null order by sort_order,name,id",
+            [ctx.tenantId],
+          )
+        : undefined;
+    if (categories)
+      for (const row of data)
+        row.category_name =
+          categories.find((c) => c.id === row.category_id)?.name ||
+          "Categoria arquivada";
+    return {
+      data,
+      total: count?.total || 0,
+      page,
+      ...(categories ? { categories } : {}),
+    };
   }, ctx.userId);
 }
 async function validateRelations(

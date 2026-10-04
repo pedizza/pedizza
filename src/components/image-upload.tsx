@@ -7,12 +7,14 @@ export function ImageUpload({
   hasImage,
   canEdit,
   onSaved,
+  compact = false,
 }: {
   resource: string;
   id: string;
   hasImage: boolean;
   canEdit: boolean;
   onSaved: () => void;
+  compact?: boolean;
 }) {
   const [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
@@ -39,6 +41,14 @@ export function ImageUpload({
   }
   return (
     <div className="stack">
+      {compact && !hasImage && version === 0 && (
+        <div
+          className="product-image-placeholder"
+          aria-label="Produto sem imagem"
+        >
+          Sem imagem
+        </div>
+      )}
       {(hasImage || version > 0) && (
         <Image
           unoptimized
@@ -51,7 +61,7 @@ export function ImageUpload({
       )}
       {canEdit && (
         <label className="btn secondary small">
-          {busy ? "Enviando…" : "Enviar imagem"}
+          {busy ? "Enviando…" : compact ? "Imagem" : "Enviar imagem"}
           <input
             hidden
             aria-label="Escolher imagem"
