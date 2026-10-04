@@ -78,7 +78,10 @@ export async function ModulePage({
         key={key}
         resourceKey={key}
         canEdit={ctx.permissions.includes(resource.write)}
-        canArchive={ctx.permissions.includes(archivePermission(key))}
+        canArchive={
+          key !== "regras-precos" &&
+          ctx.permissions.includes(archivePermission(key))
+        }
       />
     </>
   );

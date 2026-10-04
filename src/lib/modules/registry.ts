@@ -226,6 +226,20 @@ export const resources: Record<string, Resource> = {
         required: false,
         default: 0,
       },
+    ],
+    singleton: false,
+    archive: true,
+    search: "name",
+  },
+  "regras-precos": {
+    table: "menu_categories",
+    title: "Regra de Preços",
+    singular: "regra de preços",
+    description:
+      "Configure, por categoria, a cobrança de dois sabores (meia a meia).",
+    read: "menu.view",
+    write: "menu.edit",
+    fields: [
       {
         key: "allow_split",
         label: "Permitir dois sabores",
@@ -244,7 +258,6 @@ export const resources: Record<string, Resource> = {
         ],
       },
     ],
-    singleton: false,
     archive: true,
     search: "name",
   },

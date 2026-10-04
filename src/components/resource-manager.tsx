@@ -234,7 +234,7 @@ export function ResourceManager({
           <h2 style={{ marginBottom: 5 }}>{resource.title}</h2>
           <small>{resource.description}</small>
         </div>
-        {canEdit && (
+        {canEdit && resourceKey !== "regras-precos" && (
           <button
             className="btn"
             onClick={() => edit(resource.singleton ? data[0] || null : null)}
@@ -246,6 +246,27 @@ export function ResourceManager({
           </button>
         )}
       </div>
+      {resourceKey === "regras-precos" && (
+        <div className="notice">
+          <p>
+            Escolha quais categorias permitem dois sabores e edite a regra de
+            cada uma.
+          </p>
+          <p>
+            <strong>Valor proporcional:</strong> metade do preço de cada sabor.
+            R$ 50,00 + R$ 70,00 resulta em R$ 60,00.
+          </p>
+          <p>
+            <strong>Maior valor:</strong> cobra o preço integral do sabor mais
+            caro. No mesmo exemplo, R$ 70,00.
+          </p>
+          <small>
+            Os dois sabores devem ter o mesmo tamanho, configurado para aceitar
+            2 sabores no produto. Frações de centavo no valor proporcional são
+            arredondadas para cima.
+          </small>
+        </div>
+      )}
       {resource.search && (
         <form
           className="search"
@@ -275,7 +296,11 @@ export function ResourceManager({
         <div className="card">
           <EmptyState
             title={`Nenhum registro em ${resource.title.toLowerCase()}`}
-            description="Comece adicionando as informações da sua pizzaria."
+            description={
+              resourceKey === "regras-precos"
+                ? "Cadastre uma categoria na aba Categorias para configurar a regra de preços."
+                : "Comece adicionando as informações da sua pizzaria."
+            }
           />
         </div>
       ) : resource.singleton ? (
@@ -326,6 +351,13 @@ export function ResourceManager({
                     label(row)
                   )}
                 </h3>
+                {resourceKey === "regras-precos" && (
+                  <span className={`badge ${row.allow_split ? "green" : ""}`}>
+                    {row.allow_split
+                      ? "Dois sabores permitidos"
+                      : "Somente um sabor"}
+                  </span>
+                )}
                 <p>
                   {resource.fields
                     .filter(

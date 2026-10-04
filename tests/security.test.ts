@@ -311,3 +311,24 @@ it("lifetime access has no expiry but still respects administrative suspension",
     ),
   ).rejects.toThrow();
 });
+
+it("preserves microseconds for edits and rejects stale category versions", async () => {
+  const created = await db.query<{ id: string }>(
+    "insert into public.menu_categories(tenant_id,name,updated_at) values($1,'Regra QA','2026-10-04T10:00:00.123456Z') returning id",
+    [ta],
+  );
+  const id = created.rows[0].id;
+  const version = await db.query<{ updated_at: string }>(
+    `select to_char(updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as updated_at from public.menu_categories where id=$1`,
+    [id],
+  );
+  expect(version.rows[0].updated_at).toContain(".123456Z");
+  const sql =
+    "update public.menu_categories set allow_split=true,split_pricing='proportional' where tenant_id=$1 and id=$2 and updated_at=$3::timestamptz returning id";
+  expect(
+    (await db.query(sql, [ta, id, version.rows[0].updated_at])).rows,
+  ).toHaveLength(1);
+  expect(
+    (await db.query(sql, [ta, id, version.rows[0].updated_at])).rows,
+  ).toHaveLength(0);
+});

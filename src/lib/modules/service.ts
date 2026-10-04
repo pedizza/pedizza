@@ -27,9 +27,15 @@ export async function listResource(
   const r = resourceFor(key);
   invariant(ctx.permissions.includes(r.read), "Sem permissão.", 403);
   const offset = (page - 1) * 20;
-  const cols = ["id", "updated_at", ...r.fields.map((f) => f.key)];
+  const cols = [
+    "id",
+    // Preserve PostgreSQL microseconds for optimistic concurrency checks.
+    `to_char(updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as updated_at`,
+    ...r.fields.map((f) => f.key),
+  ];
   if (["produtos", "categorias"].includes(key)) cols.push("image_path");
   if (key === "loja") cols.push("logo_path");
+  if (key === "regras-precos") cols.push("name");
   return transaction(async (db) => {
     const params: unknown[] = [ctx.tenantId];
     let where = "tenant_id=$1";
@@ -174,6 +180,10 @@ export async function saveResource(
   expectedUpdatedAt?: string,
 ) {
   const r = resourceFor(key);
+  invariant(
+    key !== "regras-precos" || id,
+    "Crie a categoria na aba Categorias antes de configurar a regra.",
+  );
   let sizes: ReturnType<typeof productSizesSchema.parse> | undefined;
   if (key === "produtos" && raw && typeof raw === "object" && "sizes" in raw) {
     const { sizes: inputSizes, ...fields } = raw;
@@ -358,7 +368,10 @@ export async function removeResource(
   id: string,
 ) {
   const r = resourceFor(key);
-  invariant(!r.singleton, "Esta configuração não pode ser removida.");
+  invariant(
+    !r.singleton && key !== "regras-precos",
+    "Esta configuração não pode ser removida.",
+  );
   return transaction(async (db) => {
     await authorize(db, ctx, archivePermission(key));
     await db.query("select id from public.tenants where id=$1 for update", [

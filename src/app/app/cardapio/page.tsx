@@ -8,21 +8,14 @@ export default async function Page({
   return (
     <ModulePage
       hideHeader
-      groups={[
-        { label: "Produtos", keys: ["produtos"] },
-        { label: "Categorias", keys: ["categorias"] },
-        {
-          label: "Bordas",
-          keys: ["bordas", "borda-categorias"],
-        },
-      ]}
       title="Cardápio"
       description="Cada sabor, tamanho e detalhe da sua pizzaria."
       tabs={[
         { key: "produtos", label: "Produtos" },
         { key: "categorias", label: "Categorias" },
         { key: "bordas", label: "Bordas" },
-        { key: "borda-categorias", label: "Categorias das bordas" },
+        { key: "borda-categorias", label: "Categorias das Bordas" },
+        { key: "regras-precos", label: "Regra de Preços" },
       ]}
       selected={p.tab || "produtos"}
     />
