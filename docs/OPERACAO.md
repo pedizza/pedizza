@@ -1,0 +1,59 @@
+# Configuração e operação
+
+## Supabase
+
+Preencher `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` e `SUPABASE_SERVICE_ROLE_KEY`. A chave de serviço é exclusiva do servidor; nunca usar prefixo `NEXT_PUBLIC_` nela. `DATABASE_URL` usa o pooler de transações e `DIRECT_URL` a conexão de migrations. Os nomes das duas variáveis também são comuns no Prisma, mas aqui o cliente SQL é `pg`.
+
+No Auth, habilitar confirmação de e-mail, configurar SMTP e cadastrar a URL do aplicativo e callbacks em produção e localhost. Para os templates de confirmação, recuperação e convite, usar um link para `/auth/confirm` contendo `token_hash={{ .TokenHash }}`, `type` apropriado (`signup`, `recovery` ou `invite`) e `redirect_to={{ .RedirectTo }}` codificado como parâmetro. O callback PKCE em `/auth/callback` também é suportado. Homologar convite e recuperação com o SMTP real antes de abrir cadastros.
+
+As migrations criam buckets privados `store-logos`, `menu-images` e `conversation-media`. Upload de imagem reencoda em WebP, elimina metadados e limita pixels. Anexos enviados pelo painel têm limite de 3 MB para caber no corpo de requisição serverless; mídias recebidas pelo provider têm limite de 20 MB. URLs de leitura expiram em 60 segundos.
+
+Executar `npm run db:migrate`. O script valida o checksum das migrations já executadas, guarda inventário local do schema e utiliza transação/advisory lock. Não editar migrations aplicadas. Fazer backup externo do banco e Storage antes de migrações em uma operação existente. O inventário `.local/backups` não é backup dos dados.
+
+## Evolution API
+
+Instalar Evolution V2 em VPS com HTTPS, banco persistente e acesso seguro. Preencher `EVOLUTION_API_URL`, `EVOLUTION_API_KEY` e um segredo forte em `EVOLUTION_WEBHOOK_SECRET`. O app cria uma instância determinística por loja e configura `/api/webhooks/evolution` com cabeçalho `x-webhook-secret` e eventos de conexão/mensagens/status. O QR fica somente na resposta e na memória da tela, com expiração curta.
+
+Homologar contra a versão exata instalada: criação, QR, reconexão, envio, recebimento, status e download Base64 de mídia. A implementação usa os endpoints V2 documentados; diferenças de DTO entre versões precisam ser verificadas no servidor real.
+
+## Entrega
+
+ViaCEP não requer chave. `GEOAPIFY_API_KEY` permite geocodificação e distância de rota rodoviária. Preencher o endereço completo da loja. Não há distância aproximada por linha reta. Endereço ambíguo ou rota indisponível bloqueiam a cotação e permitem chamar um atendente. Configurar cobrança por bairro **ou** faixas de distância. O painel tem um simulador de endereço/taxa.
+
+## Mercado Pago — pedidos dos consumidores
+
+Preencher `MERCADO_PAGO_CLIENT_ID`, `MERCADO_PAGO_CLIENT_SECRET`, `MERCADO_PAGO_WEBHOOK_SECRET` e `INTEGRATION_ENCRYPTION_KEY` (32 bytes aleatórios em Base64). Cadastrar redirect URI `https://SEU_DOMINIO/api/integrations/mercado-pago/callback`. Cada pizzaria conecta sua própria conta em Configurações → Pagamentos. O webhook é `/api/webhooks/mercado-pago`.
+
+A geração do PIX exige e-mail do consumidor. O valor vem do pedido validado em centavos; a chave de idempotência é o ID do pedido. O webhook valida assinatura, consulta a transação no provider e compara valor e referência. Não usar a conta da plataforma para recebimentos de todas as lojas.
+
+## BravoPay — assinatura do Pedizza
+
+Preencher `BRAVOPAY_API_KEY`, `BRAVOPAY_WEBHOOK_SECRET` e `BRAVOPAY_PRODUCT_ID`. Plano único de R$ 47/mês, sem trial. Webhook: `/api/webhooks/bravopay`. O callback não libera acesso: somente conciliação autenticada do pagamento confirmado, com referência e valor corretos.
+
+A documentação pública verificada oferece criação de transação PIX com parâmetro `subscription` mensal. A cobrança inicial está implementada. **A homologação do ciclo recorrente completo, associação do ID de assinatura e cancelamento pelo painel ainda está pendente.** O OpenAPI publicado apenas resume os endpoints de assinatura/cancelamento, sem contrato completo de resposta. Não foi inventado um contrato. Até a homologação, tratar o cancelamento diretamente no painel BravoPay e refletir a situação pelo fluxo operacional de suporte; não anunciar cancelamento automático pelo Pedizza.
+
+## OpenAI
+
+Opcional: `OPENAI_API_KEY` e `OPENAI_MODEL`. A Responses API retorna somente uma classificação estruturada de intenção e consulta textual, com `store:false`. O modelo não decide preço, taxa, desconto, pagamento nem confirmação. Quando indisponível, permanece o fluxo determinístico numerado.
+
+## Push e filas
+
+Gerar VAPID com `web-push generate-vapid-keys`, preencher chave pública, privada e `VAPID_SUBJECT` com contato real. Ativar notificações a partir de um gesto do usuário. No iPhone, testar como PWA instalada. O service worker não armazena respostas de API nem páginas privadas. Som exige interação anterior e permissão do navegador.
+
+Webhooks são persistidos antes da resposta e processados em `after()`. Filas usam locks, idempotência e tentativas limitadas. Erros de envio de mensagem não são repetidos automaticamente, pois um timeout pode ocorrer após o WhatsApp já ter enviado. Conferir a mensagem antes de reenviar.
+
+`/api/cron` exige `Authorization: Bearer CRON_SECRET`. O `vercel.json` contém um cron diário compatível com o plano gratuito. Para reprocessamento e alertas de atraso em poucos minutos, configurar um scheduler HTTPS confiável a cada minuto ou um worker na VPS. Não colocar o segredo em URLs/logs. Sem esse scheduler, falhas podem aguardar o próximo webhook ou cron diário. Monitorar filas com erro no Master.
+
+## Administração Master
+
+Acesso depende exclusivamente da tabela privada `private.super_admins`, não do papel owner ou metadata de cadastro. Depois de confirmar o e-mail do administrador, o operador do banco pode inserir seu UUID nessa tabela. Essa operação não está exposta na aplicação. Não há promoção automática de quem se cadastra primeiro.
+
+`/master` oferece visão da plataforma, suspensão por motivo, auditoria e suporte somente para consulta, por sessão de 15 minutos. Remover uma suspensão administrativa não cria um período pago. MFA obrigatório e suporte com alteração operacional não estão implementados; manter acesso administrativo restrito até ampliar essa proteção.
+
+## Publicação
+
+Repositório público: https://github.com/pedizza/pedizza. Deploy com Vercel CLI autenticada, após `npm run check`. Configurar as variáveis no ambiente Production, definir `NEXT_PUBLIC_APP_URL` para o domínio real e publicar novamente quando variáveis públicas mudarem. Nunca copiar `.env.local` para o repositório.
+
+Homologar callbacks, e-mail, pagamento, webhook, scheduler, mobile e impressão com dois tenants reais de teste antes de comercializar. Os textos de termos e privacidade estão marcados como rascunhos e precisam dos dados e regras reais do operador.
+
+Referências de contrato: [Evolution API](https://github.com/evolution-foundation/evolution-api), [Geoapify](https://apidocs.geoapify.com/), [Mercado Pago](https://www.mercadopago.com.br/developers/pt/docs), [BravoPay](https://www.bravopay.club/docs), [OpenAI Structured Outputs](https://developers.openai.com/api/docs/guides/structured-outputs).

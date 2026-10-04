@@ -1,0 +1,1 @@
+update storage.buckets set allowed_mime_types=array['image/jpeg','image/png','image/webp','audio/ogg','audio/mpeg','audio/mp4','audio/wav','audio/webm','video/mp4','video/webm','application/pdf'] where id='conversation-media';
