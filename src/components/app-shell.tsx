@@ -87,6 +87,7 @@ export function AppShell({
               <Link
                 key={n.href}
                 href={n.href}
+                prefetch={false}
                 onClick={() => setOpen(false)}
                 className={`nav-link ${path.startsWith(n.href) ? "active" : ""}`}
               >

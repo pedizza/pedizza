@@ -4,6 +4,7 @@ export async function proxy(request: NextRequest) {
   // Redirect browser pages only; provider callbacks must keep their original URL.
   if (
     process.env.NODE_ENV === "production" &&
+    process.env.CANONICAL_REDIRECT_ENABLED === "true" &&
     ["pedizza.vercel.app", "pedizza.com.br"].includes(
       request.nextUrl.hostname,
     ) &&

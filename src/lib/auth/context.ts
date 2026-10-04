@@ -38,14 +38,9 @@ export const getCurrentTenant = cache(
       );
       const m = memberships.find((x) => x.id === selected) || memberships[0];
       if (!m) return null;
-      const permissions = await rows<{ code: Permission }>(
+      const access = await one<{ permissions: Permission[]; allowed: boolean }>(
         db,
-        `select code from public.permissions where public.has_permission($1,code)`,
-        [m.id],
-      );
-      const access = await one<{ allowed: boolean }>(
-        db,
-        "select private.subscription_active($1) allowed",
+        `select array(select code from public.permissions where public.has_permission($1,code)) permissions, private.subscription_active($1) allowed`,
         [m.id],
       );
       return {
@@ -56,7 +51,7 @@ export const getCurrentTenant = cache(
         tenantName: m.name,
         memberId: m.member_id,
         role: m.role,
-        permissions: permissions.map((x) => x.code),
+        permissions: access?.permissions || [],
         subscriptionActive: !!access?.allowed,
         memberships: memberships.map((x) => ({ id: x.id, name: x.name })),
       };

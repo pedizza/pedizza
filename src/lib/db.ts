@@ -31,8 +31,7 @@ export async function transaction<T>(
 ): Promise<T> {
   const db = await getPool().connect();
   try {
-    await db.query("begin");
-    await db.query("set local statement_timeout='15s'");
+    await db.query("begin; set local statement_timeout='15s'");
     if (userId) {
       await db.query(
         "select set_config('request.jwt.claim.sub',$1,true),set_config('request.jwt.claims',$2,true)",
