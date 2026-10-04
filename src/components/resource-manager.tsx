@@ -8,6 +8,8 @@ import {
   ArrowLeft,
   ArrowRight,
   Copy,
+  Pause,
+  Play,
 } from "lucide-react";
 import { resources, optionLabels, type Field } from "@/lib/modules/registry";
 import { formatCurrency, parseCurrency } from "@/lib/domain/money";
@@ -54,6 +56,7 @@ export function ResourceManager({
     [toast, setToast] = useState(""),
     [options, setOptions] = useState<Record<string, Row[]>>({}),
     [remove, setRemove] = useState<Row | null>(null),
+    [toggling, setToggling] = useState<string | null>(null),
     [dirty, setDirty] = useState(false);
   const load = useCallback(
     (signal?: AbortSignal) =>
@@ -211,6 +214,40 @@ export function ResourceManager({
       setError(e instanceof Error ? e.message : "Não foi possível remover.");
     } finally {
       setBusy(false);
+    }
+  }
+  async function toggleAvailability(row: Row) {
+    const available = !Boolean(row.available);
+    setToggling(row.id);
+    setError("");
+    try {
+      const response = await fetch(`/api/data/${resourceKey}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: row.id,
+          available,
+          updated_at: row.updated_at,
+        }),
+      });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error);
+      setData((current) =>
+        current.map((item) =>
+          item.id === row.id
+            ? { ...item, available, updated_at: body.updated_at }
+            : item,
+        ),
+      );
+      setToast(available ? "Produto reativado." : "Produto pausado.");
+    } catch (e) {
+      setError(
+        e instanceof Error
+          ? e.message
+          : "Não foi possível alterar o produto.",
+      );
+    } finally {
+      setToggling(null);
     }
   }
   function label(row: Row) {
@@ -469,8 +506,14 @@ export function ResourceManager({
               )}
               <div className="actions">
                 {"active" in row && (
-                  <span className={`badge ${row.active ? "green" : ""}`}>
-                    {row.active ? "Ativo" : "Inativo"}
+                  <span
+                    className={`badge ${row.active && row.available !== false ? "green" : resourceKey === "produtos" && row.active ? "amber" : ""}`}
+                  >
+                    {!row.active
+                      ? "Inativo"
+                      : resourceKey === "produtos" && row.available === false
+                        ? "Pausado"
+                        : "Ativo"}
                   </span>
                 )}
                 {canEdit && (
@@ -483,18 +526,44 @@ export function ResourceManager({
                       <Pencil size={15} />
                     </button>
                     {resourceKey === "produtos" && (
-                      <button
-                        className="icon-button"
-                        aria-label="Duplicar produto"
-                        onClick={() => {
-                          const copy = { ...row, name: row.name + " (cópia)" };
-                          delete (copy as Partial<Row>).id;
-                          delete (copy as Partial<Row>).updated_at;
-                          edit(copy);
-                        }}
-                      >
-                        <Copy size={15} />
-                      </button>
+                      <>
+                        <button
+                          className="icon-button"
+                          aria-label="Duplicar produto"
+                          onClick={() => {
+                            const copy = {
+                              ...row,
+                              name: row.name + " (cópia)",
+                            };
+                            delete (copy as Partial<Row>).id;
+                            delete (copy as Partial<Row>).updated_at;
+                            edit(copy);
+                          }}
+                        >
+                          <Copy size={15} />
+                        </button>
+                        <button
+                          className={`icon-button ${row.available === false ? "resume-action" : ""}`}
+                          aria-label={
+                            row.available === false
+                              ? `Reativar ${label(row)}`
+                              : `Pausar ${label(row)}`
+                          }
+                          title={
+                            row.available === false
+                              ? "Reativar produto"
+                              : "Pausar produto"
+                          }
+                          disabled={toggling === row.id}
+                          onClick={() => void toggleAvailability(row)}
+                        >
+                          {row.available === false ? (
+                            <Play size={15} />
+                          ) : (
+                            <Pause size={15} />
+                          )}
+                        </button>
+                      </>
                     )}
                   </>
                 )}

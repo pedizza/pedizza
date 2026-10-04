@@ -13,7 +13,9 @@ import {
   saveResource,
   removeResource,
   archivePermission,
+  setProductAvailability,
 } from "@/lib/modules/service";
+import { AppError } from "@/lib/errors";
 type Context = { params: Promise<{ resource: string }> };
 export async function GET(request: Request, { params }: Context) {
   try {
@@ -61,6 +63,35 @@ export async function POST(request: Request, { params }: Context) {
       .strict()
       .parse(await readJson(request));
     return json(await saveResource(ctx, resource, data, id, updated_at));
+  } catch (e) {
+    return apiError(e);
+  }
+}
+export async function PATCH(request: Request, { params }: Context) {
+  try {
+    verifyOrigin(request);
+    const { resource } = await params;
+    if (resource !== "produtos")
+      throw new AppError(404, "Ação não disponível.");
+    const r = resourceFor(resource);
+    const ctx = await requireTenant(r.write);
+    await rateLimit(ctx.userId + ":write", 90);
+    const input = z
+      .object({
+        id: z.uuid(),
+        available: z.boolean(),
+        updated_at: z.string().optional(),
+      })
+      .strict()
+      .parse(await readJson(request));
+    return json(
+      await setProductAvailability(
+        ctx,
+        input.id,
+        input.available,
+        input.updated_at,
+      ),
+    );
   } catch (e) {
     return apiError(e);
   }

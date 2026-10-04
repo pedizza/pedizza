@@ -385,6 +385,44 @@ export function archivePermission(key: string) {
         ? "campaigns.archive"
         : r.write;
 }
+
+export async function setProductAvailability(
+  ctx: TenantContext,
+  id: string,
+  available: boolean,
+  expectedUpdatedAt?: string,
+) {
+  const r = resourceFor("produtos");
+  return transaction(async (db) => {
+    await authorize(db, ctx, r.write);
+    const params: unknown[] = [ctx.tenantId, id, available];
+    let where = "tenant_id=$1 and id=$2 and archived_at is null";
+    if (expectedUpdatedAt) {
+      params.push(expectedUpdatedAt);
+      where += ` and updated_at=$${params.length}::timestamptz`;
+    }
+    const result = await one<DataRow>(
+      db,
+      `update public.menu_items set available=$3 where ${where} returning id,to_char(updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as updated_at`,
+      params,
+    );
+    invariant(
+      result,
+      "O produto mudou ou não está disponível. Atualize a página.",
+      409,
+    );
+    await audit(
+      db,
+      ctx.tenantId,
+      ctx.userId,
+      available ? "produtos.resumed" : "produtos.paused",
+      r.table,
+      id,
+    );
+    return { ...result, available };
+  });
+}
+
 export async function removeResource(
   ctx: TenantContext,
   key: string,
