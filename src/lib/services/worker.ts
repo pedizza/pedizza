@@ -2,7 +2,7 @@ import "server-only";
 import { z } from "zod";
 import webpush from "web-push";
 import { transaction, one, rows } from "@/lib/db";
-import { supabaseAdmin } from "@/lib/supabase/admin";
+import { privateFiles } from "@/lib/services/files";
 import { storeMedia } from "./media";
 import { sendText, sendMedia, mediaBase64 } from "@/lib/integrations/evolution";
 import {
@@ -141,7 +141,7 @@ async function dispatchMessage(job: Job) {
     invariant(target.status === "connected", "WhatsApp desconectado.");
     let externalId: string;
     if (input.media) {
-      const { data, error } = await supabaseAdmin()
+      const { data, error } = await privateFiles()
         .storage.from("conversation-media")
         .download(input.media.path);
       invariant(data && !error, "Anexo indisponível.");

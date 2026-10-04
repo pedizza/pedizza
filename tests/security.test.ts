@@ -12,14 +12,21 @@ beforeAll(async () => {
   await db.exec(
     `create role anon;create role authenticated;create schema auth;create table auth.users(id uuid primary key,raw_user_meta_data jsonb);create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$;grant usage on schema auth to authenticated;grant execute on function auth.uid() to authenticated;`,
   );
+  let customAuthMigration = "";
   for (const file of (await readdir("supabase/migrations"))
     .filter((x) => x.endsWith(".sql") && !x.includes("storage"))
     .sort())
-    await db.exec(await readFile("supabase/migrations/" + file, "utf8"));
+    if (file.includes("local_auth"))
+      customAuthMigration = await readFile(
+        "supabase/migrations/" + file,
+        "utf8",
+      );
+    else await db.exec(await readFile("supabase/migrations/" + file, "utf8"));
   await db.query(
     `insert into auth.users values($1,'{"name":"A","store_name":"Pizza A"}'),($2,'{"name":"B","store_name":"Pizza B"}')`,
     [a, b],
   );
+  if (customAuthMigration) await db.exec(customAuthMigration);
   ta = (
     await db.query<{ tenant_id: string }>(
       "select tenant_id from public.tenant_members where user_id=$1",
@@ -265,4 +272,42 @@ describe("Order integrity against PostgreSQL", () => {
       ),
     ).rejects.toThrow();
   });
+});
+
+it("lifetime access has no expiry but still respects administrative suspension", async () => {
+  await db.query(
+    "update public.subscriptions set lifetime_access=true,status='active',current_period_end=null where tenant_id=$1",
+    [ta],
+  );
+  expect(
+    (
+      await db.query<{ allowed: boolean }>(
+        "select private.subscription_active($1) allowed",
+        [ta],
+      )
+    ).rows[0].allowed,
+  ).toBe(true);
+  await db.query(
+    "update public.tenants set manually_suspended=true where id=$1",
+    [ta],
+  );
+  expect(
+    (
+      await db.query<{ allowed: boolean }>(
+        "select private.subscription_active($1) allowed",
+        [ta],
+      )
+    ).rows[0].allowed,
+  ).toBe(false);
+  await db.query(
+    "update public.tenants set manually_suspended=false where id=$1",
+    [ta],
+  );
+  await expect(
+    asUser(
+      a,
+      "update public.subscriptions set lifetime_access=true where tenant_id=$1",
+      [tb],
+    ),
+  ).rejects.toThrow();
 });

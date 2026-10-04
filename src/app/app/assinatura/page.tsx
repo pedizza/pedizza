@@ -8,11 +8,12 @@ export default async function Page() {
     (db) =>
       one<{
         status: string;
+        lifetime_access: boolean;
         price_cents: number;
         current_period_end: Date | null;
       }>(
         db,
-        "select s.status,p.price_cents,s.current_period_end from public.subscriptions s join public.subscription_plans p on p.id=s.plan_id where s.tenant_id=$1",
+        "select s.status,s.lifetime_access,p.price_cents,s.current_period_end from public.subscriptions s join public.subscription_plans p on p.id=s.plan_id where s.tenant_id=$1",
         [ctx.tenantId],
       ),
     ctx.userId,
@@ -24,6 +25,7 @@ export default async function Page() {
         description="Seu plano, pagamento e acesso ao Pedizza."
       />
       <Billing
+        lifetime={!!s?.lifetime_access}
         status={s?.status || "pending"}
         price={s?.price_cents || 4700}
         period={s?.current_period_end?.toISOString() || null}

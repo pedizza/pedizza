@@ -39,6 +39,15 @@ export async function createBillingCharge(ctx: TenantContext) {
   );
   const charge = await transaction(async (db) => {
     await authorize(db, ctx, "subscription.manage", true);
+    const access = await one<{ lifetime_access: boolean }>(
+      db,
+      "select lifetime_access from public.subscriptions where tenant_id=$1",
+      [ctx.tenantId],
+    );
+    invariant(
+      !access?.lifetime_access,
+      "Esta loja possui acesso vitalício e não precisa de cobrança.",
+    );
     await db.query("select id from public.tenants where id=$1 for update", [
       ctx.tenantId,
     ]);

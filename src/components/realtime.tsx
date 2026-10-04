@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useRef } from "react";
-import { supabaseBrowser } from "@/lib/supabase/client";
+// JWT stays in HttpOnly cookies. Refresh through tenant-authorized APIs.
 export function useRealtime(
   tenantId: string,
   table: string,
@@ -12,30 +12,16 @@ export function useRealtime(
     callback.current = onChange;
   }, [onChange]);
   useEffect(() => {
-    if (!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) return;
-    const client = supabaseBrowser();
-    let timer: ReturnType<typeof setTimeout>;
-    const channel = client
-      .channel(`${table}:${tenantId}:${filter || ""}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table,
-          filter: filter || `tenant_id=eq.${tenantId}`,
-        },
-        () => {
-          clearTimeout(timer);
-          timer = setTimeout(() => callback.current(), 250);
-        },
-      )
-      .subscribe((status) => {
-        if (status === "SUBSCRIBED") callback.current();
-      });
+    const refresh = () => {
+      if (document.visibilityState === "visible") callback.current();
+    };
+    const timer = setInterval(refresh, 5000);
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
     return () => {
-      clearTimeout(timer);
-      void client.removeChannel(channel);
+      clearInterval(timer);
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
     };
   }, [tenantId, table, filter]);
 }

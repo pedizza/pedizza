@@ -1,37 +1,83 @@
 "use server";
 import { z } from "zod";
 import { redirect } from "next/navigation";
-import { cookies } from "next/headers";
-import { supabaseServer } from "@/lib/supabase/server";
+import { cookies, headers } from "next/headers";
+import { randomBytes, createHash } from "node:crypto";
+import { transaction, one } from "@/lib/db";
+import { hashPassword, verifyPassword } from "@/lib/auth/password";
+import { createSession, endSession } from "@/lib/auth/session";
+import { mailConfigured, sendMail } from "@/lib/auth/mail";
+import { rateLimit } from "@/lib/security/http";
+import { AppError } from "@/lib/errors";
 import { appUrl } from "@/lib/env";
 const credentials = z.object({
-  email: z.email().max(254),
+  email: z
+    .email()
+    .max(254)
+    .transform((v) => v.toLowerCase()),
   password: z.string().min(8, "Use pelo menos 8 caracteres.").max(128),
 });
 export type AuthState = { error?: string; success?: string };
-export async function login(
-  _state: AuthState,
-  form: FormData,
-): Promise<AuthState> {
-  const parsed = credentials.safeParse(Object.fromEntries(form));
-  if (!parsed.success) return { error: parsed.error.issues[0].message };
-  if (!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)
-    return {
-      error: "O acesso está sendo configurado. Tente novamente em breve.",
-    };
-  const client = await supabaseServer();
-  const { error } = await client.auth.signInWithPassword(parsed.data);
-  if (error)
-    return { error: "Não foi possível entrar. Confira seu e-mail e senha." };
-  const invite = (await cookies()).get("pedizza-invite")?.value;
-  if (invite && /^[a-f0-9]{64}$/.test(invite))
-    redirect("/convite?token=" + invite);
-  redirect("/app");
+async function throttle(email: string, kind: string) {
+  const h = await headers();
+  const ip = process.env.VERCEL
+    ? h.get("x-vercel-forwarded-for") || "unknown"
+    : "local";
+  await rateLimit("auth:" + kind + ":ip:" + ip, 50, 900);
+  await rateLimit("auth:" + kind + ":email:" + email, 10, 900);
 }
-export async function signup(
-  _state: AuthState,
-  form: FormData,
-): Promise<AuthState> {
+function failure(e: unknown) {
+  return {
+    error:
+      e instanceof AppError
+        ? e.message
+        : "Não foi possível concluir. Tente novamente.",
+  };
+}
+export async function login(_: AuthState, form: FormData): Promise<AuthState> {
+  const data = credentials.safeParse(Object.fromEntries(form));
+  if (!data.success) return { error: data.error.issues[0].message };
+  let destination = "/app";
+  try {
+    await throttle(data.data.email, "login");
+    const account = await transaction((db) =>
+      one<{
+        id: string;
+        password_hash: string | null;
+        email_verified_at: Date | null;
+        blocked: boolean;
+      }>(
+        db,
+        "select a.id,a.password_hash,a.email_verified_at,p.blocked from private.accounts a join public.profiles p on p.id=a.id where a.email=$1",
+        [data.data.email],
+      ),
+    );
+    const valid = await verifyPassword(
+      data.data.password,
+      account?.password_hash || null,
+    );
+    if (!account || !valid || account.blocked)
+      return { error: "Não foi possível entrar. Confira seu e-mail e senha." };
+    if (!account.email_verified_at)
+      return { error: "Confirme seu e-mail antes de entrar." };
+    await createSession(account.id);
+    const master = await transaction((db) =>
+      one(db, "select user_id from private.super_admins where user_id=$1", [
+        account.id,
+      ]),
+    );
+    const invite = (await cookies()).get("pedizza-invite")?.value;
+    destination = master
+      ? "/master"
+      : invite && /^[a-f0-9]{64}$/.test(invite)
+        ? "/convite?token=" + invite
+        : "/app";
+  } catch (e) {
+    return failure(e);
+  }
+  redirect(destination);
+}
+export async function signup(_: AuthState, form: FormData): Promise<AuthState> {
   const parsed = credentials
     .extend({
       name: z.string().trim().min(2).max(120),
@@ -39,74 +85,160 @@ export async function signup(
     })
     .safeParse(Object.fromEntries(form));
   if (!parsed.success) return { error: parsed.error.issues[0].message };
-  if (!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)
-    return {
-      error: "O cadastro está sendo configurado. Tente novamente em breve.",
-    };
-  const client = await supabaseServer();
-  const { email, password, name, store_name } = parsed.data;
-  const { data, error } = await client.auth.signUp({
-    email,
-    password,
-    options: {
-      data: { name, store_name },
-      emailRedirectTo: appUrl() + "/auth/callback",
-    },
-  });
-  if (error)
+  if (!mailConfigured())
     return {
       error:
-        "Não foi possível cadastrar. Confira os dados ou tente entrar na sua conta.",
+        "O envio de confirmação está sendo configurado. Solicite seu acesso ao administrador.",
     };
-  if (data.session) redirect("/app");
-  return {
-    success: "Confira seu e-mail para confirmar o cadastro e acessar sua loja.",
-  };
+  try {
+    const d = parsed.data;
+    await throttle(d.email, "signup");
+    const hash = await hashPassword(d.password),
+      token = randomBytes(32).toString("hex");
+    const created = await transaction(async (db) => {
+      if (
+        await one(db, "select id from private.accounts where email=$1", [
+          d.email,
+        ])
+      )
+        return false;
+      const id = crypto.randomUUID(),
+        tenant = crypto.randomUUID();
+      await db.query(
+        "insert into private.accounts(id,email,password_hash) values($1,$2,$3)",
+        [id, d.email, hash],
+      );
+      await db.query("insert into public.profiles(id,name) values($1,$2)", [
+        id,
+        d.name,
+      ]);
+      await db.query(
+        "insert into public.tenants(id,name,slug) values($1,$2,$3)",
+        [tenant, d.store_name, "loja-" + tenant],
+      );
+      await db.query(
+        "insert into public.tenant_members(tenant_id,user_id,role) values($1,$2,'owner')",
+        [tenant, id],
+      );
+      await db.query(
+        "insert into public.subscriptions(tenant_id,plan_id) select $1,id from public.subscription_plans where code='pedizza_monthly'",
+        [tenant],
+      );
+      await db.query(
+        "insert into private.auth_tokens(token_hash,user_id,purpose,expires_at) values($1,$2,'verify',now()+interval '24 hours')",
+        [createHash("sha256").update(token).digest("hex"), id],
+      );
+      return true;
+    });
+    if (created)
+      await sendMail(
+        d.email,
+        "Confirme sua conta Pedizza",
+        "Confirme sua conta: " + appUrl() + "/auth/confirm?token=" + token,
+      );
+    return {
+      success:
+        "Confira seu e-mail para confirmar o cadastro. Se já tem conta, use a recuperação de senha.",
+    };
+  } catch (e) {
+    return failure(e);
+  }
 }
 export async function logout() {
-  const client = await supabaseServer();
-  await client.auth.signOut();
+  await endSession();
   (await cookies()).delete("pedizza-tenant");
   redirect("/login");
 }
 export async function recover(
-  _state: AuthState,
+  _: AuthState,
   form: FormData,
 ): Promise<AuthState> {
-  const email = z.email().safeParse(form.get("email"));
+  const email = z
+    .email()
+    .transform((v) => v.toLowerCase())
+    .safeParse(form.get("email"));
   if (!email.success) return { error: "Informe um e-mail válido." };
-  if (!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)
+  if (!mailConfigured())
     return {
-      error: "O acesso está sendo configurado. Tente novamente em breve.",
+      error:
+        "A recuperação por e-mail ainda não está configurada. Contate o administrador.",
     };
-  const client = await supabaseServer();
-  await client.auth.resetPasswordForEmail(email.data, {
-    redirectTo: appUrl() + "/auth/callback?next=/nova-senha",
-  });
-  return {
-    success:
-      "Se o e-mail estiver cadastrado, você receberá as instruções de recuperação.",
-  };
+  try {
+    await throttle(email.data, "recover");
+    const token = randomBytes(32).toString("hex");
+    const user = await transaction(async (db) => {
+      const u = await one<{ id: string }>(
+        db,
+        "select id from private.accounts where email=$1",
+        [email.data],
+      );
+      if (u)
+        await db.query(
+          "insert into private.auth_tokens(token_hash,user_id,purpose,expires_at) values($1,$2,'reset',now()+interval '30 minutes')",
+          [createHash("sha256").update(token).digest("hex"), u.id],
+        );
+      return u;
+    });
+    if (user)
+      await sendMail(
+        email.data,
+        "Recuperação de acesso Pedizza",
+        "Escolha uma nova senha: " + appUrl() + "/nova-senha?token=" + token,
+      );
+    return {
+      success: "Se o e-mail estiver cadastrado, você receberá as instruções.",
+    };
+  } catch (e) {
+    return failure(e);
+  }
 }
 export async function updatePassword(
-  _state: AuthState,
+  _: AuthState,
   form: FormData,
 ): Promise<AuthState> {
-  const password = z.string().min(8).max(128).safeParse(form.get("password"));
-  if (!password.success)
-    return { error: "Use uma senha de 8 a 128 caracteres." };
-  if (!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)
+  const d = z
+    .object({
+      password: z.string().min(8).max(128),
+      token: z.string().regex(/^[a-f0-9]{64}$/),
+    })
+    .safeParse(Object.fromEntries(form));
+  if (!d.success)
     return {
-      error: "O acesso está sendo configurado. Tente novamente em breve.",
+      error: "Link inválido ou senha fora do limite de 8 a 128 caracteres.",
     };
-  const client = await supabaseServer();
-  const { error } = await client.auth.updateUser({ password: password.data });
-  if (error)
-    return {
-      error: "Não foi possível atualizar sua senha. Solicite um novo link.",
-    };
-  const invite = (await cookies()).get("pedizza-invite")?.value;
-  if (invite && /^[a-f0-9]{64}$/.test(invite))
-    redirect("/convite?token=" + invite);
-  redirect("/app");
+  try {
+    await rateLimit(
+      "auth:reset:" + createHash("sha256").update(d.data.token).digest("hex"),
+      10,
+      900,
+    );
+    const hash = await hashPassword(d.data.password);
+    const changed = await transaction(async (db) => {
+      const token = await one<{ user_id: string }>(
+        db,
+        "update private.auth_tokens set used_at=now() where token_hash=$1 and purpose='reset' and used_at is null and expires_at>now() returning user_id",
+        [createHash("sha256").update(d.data.token).digest("hex")],
+      );
+      if (!token) return false;
+      await db.query(
+        "update private.accounts set password_hash=$2,email_verified_at=coalesce(email_verified_at,now()) where id=$1",
+        [token.user_id, hash],
+      );
+      await db.query(
+        "update private.sessions set revoked_at=now() where user_id=$1",
+        [token.user_id],
+      );
+      await db.query(
+        "update private.auth_tokens set used_at=now() where user_id=$1",
+        [token.user_id],
+      );
+      return true;
+    });
+    if (!changed)
+      return { error: "Link inválido ou expirado. Solicite outro." };
+  } catch (e) {
+    return failure(e);
+  }
+  await endSession();
+  redirect("/login");
 }

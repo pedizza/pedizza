@@ -58,7 +58,7 @@ export default async function Page({
     const chart = financial
       ? await rows<{ day: string; total: number }>(
           db,
-          `select to_char(o.created_at at time zone s.timezone,'DD/MM') day,sum(o.total_cents)::bigint total from public.orders o join public.store_settings s on s.tenant_id=o.tenant_id where o.tenant_id=$1 and o.order_status in ('delivered','picked_up') and o.created_at>=now()-$2*interval '1 day' group by 1 order by min(o.created_at)`,
+          `select to_char(o.created_at at time zone s.timezone,'DD/MM') as "day",sum(o.total_cents)::bigint total from public.orders o join public.store_settings s on s.tenant_id=o.tenant_id where o.tenant_id=$1 and o.order_status in ('delivered','picked_up') and o.created_at>=now()-$2*interval '1 day' group by 1 order by min(o.created_at)`,
           [ctx.tenantId, days],
         )
       : [];

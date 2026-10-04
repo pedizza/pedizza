@@ -2,7 +2,7 @@ import "server-only";
 import { cache } from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { supabaseServer } from "@/lib/supabase/server";
+import { currentUser } from "./session";
 import { transaction, one, rows, type DB } from "@/lib/db";
 import { AppError } from "@/lib/errors";
 import type { Permission } from "@/lib/permissions";
@@ -18,13 +18,7 @@ export type TenantContext = {
   subscriptionActive: boolean;
   memberships: { id: string; name: string }[];
 };
-export const getCurrentUser = cache(async () => {
-  if (!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) return null;
-  const client = await supabaseServer();
-  const { data, error } = await client.auth.getUser();
-  if (error || !data.user) return null;
-  return data.user;
-});
+export const getCurrentUser = cache(currentUser);
 export const getCurrentTenant = cache(
   async (): Promise<TenantContext | null> => {
     const user = await getCurrentUser();
@@ -126,16 +120,11 @@ export async function requireMaster(requireMfa = true) {
     user.id,
   );
   if (!result?.allowed) throw new AppError(403, "Acesso restrito.");
-  if (requireMfa) {
-    const client = await supabaseServer();
-    const { data, error } =
-      await client.auth.mfa.getAuthenticatorAssuranceLevel();
-    if (error || data?.currentLevel !== "aal2")
-      throw new AppError(
-        403,
-        "Confirme a autenticação de dois fatores.",
-        "MFA_REQUIRED",
-      );
-  }
+  if (requireMfa && !user.mfaVerified)
+    throw new AppError(
+      403,
+      "Confirme a autenticação de dois fatores.",
+      "MFA_REQUIRED",
+    );
   return user;
 }

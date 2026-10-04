@@ -13,7 +13,7 @@ import { invariant } from "@/lib/errors";
 import { permissionCodes } from "@/lib/permissions";
 import { audit } from "@/lib/audit";
 import { appUrl } from "@/lib/env";
-import { supabaseAdmin } from "@/lib/supabase/admin";
+import { mailConfigured, sendMail } from "@/lib/auth/mail";
 export async function GET() {
   try {
     const ctx = await requireTenant("team.view");
@@ -174,15 +174,17 @@ export async function POST(request: Request) {
       });
       const link = appUrl() + "/convite?token=" + token;
       let emailSent = false;
-      if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
-        const { error } = await supabaseAdmin().auth.admin.inviteUserByEmail(
-          input.email,
-          {
-            redirectTo: appUrl() + "/auth/callback?invite=" + token,
-            data: { name: input.email.split("@")[0] },
-          },
-        );
-        emailSent = !error;
+      if (mailConfigured()) {
+        try {
+          await sendMail(
+            input.email,
+            "Convite para o Pedizza",
+            "Acesse seu convite: " + link,
+          );
+          emailSent = true;
+        } catch {
+          emailSent = false;
+        }
       }
       return json({ ok: true, link, emailSent });
     }

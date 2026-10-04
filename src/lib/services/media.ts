@@ -1,7 +1,7 @@
 import "server-only";
 import sharp from "sharp";
 import { invariant } from "@/lib/errors";
-import { supabaseAdmin } from "@/lib/supabase/admin";
+import { privateFiles } from "@/lib/services/files";
 export function detectMedia(data: Buffer) {
   if (data.subarray(0, 3).equals(Buffer.from([255, 216, 255])))
     return "image/jpeg";
@@ -74,7 +74,7 @@ export async function storeMedia(
     } as Record<string, string>
   )[mime];
   const path = `${tenant}/${folder}/${crypto.randomUUID()}.${ext}`;
-  const { error } = await supabaseAdmin()
+  const { error } = await privateFiles()
     .storage.from("conversation-media")
     .upload(path, data, { contentType: mime, upsert: false });
   invariant(!error, "Não foi possível armazenar o arquivo.", 503);

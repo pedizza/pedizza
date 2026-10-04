@@ -1,6 +1,6 @@
 # QA e estado de entrega
 
-Verificação local: lint e TypeScript sem erros, 19 testes de domínio/segurança/banco aprovados. Os 6 testes de navegador passaram em localhost e na publicação Vercel.
+Verificação local: lint e TypeScript sem erros, 23 testes de domínio/segurança/banco/autenticação aprovados. Os 6 testes de navegador passaram em localhost e na publicação Vercel.
 
 ## Automatizado
 
@@ -14,7 +14,7 @@ Os testes de providers não chamam serviços pagos. Os testes de banco não inse
 
 ## Homologação pendente
 
-As chaves de Auth/Storage, Evolution, Geoapify, OpenAI e BravoPay estavam vazias na última verificação local. Portanto, ainda não foram validados: cadastro/e-mail/login real, recuperação, convites por e-mail, QR de WhatsApp, envio/recebimento de anexos, rotas de endereço, PIX e pagamento recorrente, push em dispositivo físico e impressão térmica.
+A autenticação foi migrada para JWT próprio. SMTP e credenciais de Evolution, Geoapify, OpenAI e BravoPay continuam necessários para homologar: cadastro público/e-mail, recuperação, convites por e-mail, QR de WhatsApp, envio/recebimento de anexos, rotas de endereço, PIX e pagamento recorrente, push em dispositivo físico e impressão térmica.
 
 Com as chaves configuradas, executar:
 
@@ -40,3 +40,5 @@ Com as chaves configuradas, executar:
 - Tabelas autenticadas e fluxos completos ainda precisam de teste visual com conta real; a inspeção visual feita cobre as telas públicas.
 - Cron diário sozinho não atende retentativas e alertas em tempo real; provisionar scheduler contínuo.
 - Nenhuma cobrança ou mensagem externa foi disparada durante a implementação.
+
+Autenticação própria: testados login Torre, exibição vitalícia, negação ao Master, cookie HttpOnly e revogação de sessão após logout. Login do administrador encaminha para TOTP; o fator deve ser configurado pelo próprio administrador.

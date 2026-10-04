@@ -4,12 +4,14 @@ import { Copy, CheckCircle2, ShieldCheck } from "lucide-react";
 import { formatCurrency } from "@/lib/domain/money";
 export function Billing({
   status,
+  lifetime = false,
   price,
   period,
   canManage,
   configured,
 }: {
   status: string;
+  lifetime?: boolean;
   price: number;
   period: string | null;
   canManage: boolean;
@@ -47,8 +49,10 @@ export function Billing({
       <section className="card">
         <span className="eyebrow">PLANO PEDIZZA</span>
         <h1 style={{ fontSize: 45, margin: "20px 0 8px" }}>
-          {formatCurrency(price)}
-          <small style={{ display: "inline", marginLeft: 8 }}>/mês</small>
+          {lifetime ? "Vitalício" : formatCurrency(price)}
+          {!lifetime && (
+            <small style={{ display: "inline", marginLeft: 8 }}>/mês</small>
+          )}
         </h1>
         <p className="muted">
           Uma plataforma para cuidar de toda a sua pizzaria.
@@ -82,7 +86,7 @@ export function Billing({
             Período atual até {new Date(period).toLocaleDateString("pt-BR")}.
           </p>
         )}
-        {canManage && status !== "active" && (
+        {canManage && !lifetime && status !== "active" && (
           <button
             className="btn"
             style={{ width: "100%", marginTop: 25 }}
@@ -92,7 +96,7 @@ export function Billing({
             {busy ? "Gerando cobrança…" : "Regularizar assinatura"}
           </button>
         )}
-        {!configured && (
+        {!configured && !lifetime && (
           <p className="notice" style={{ marginTop: 20 }}>
             O pagamento da assinatura está aguardando configuração. Seus dados
             permanecem protegidos.
@@ -103,10 +107,13 @@ export function Billing({
         <span className="icon-box">
           <ShieldCheck size={24} />
         </span>
-        <h2 style={{ marginTop: 20 }}>Pagamento da assinatura</h2>
+        <h2 style={{ marginTop: 20 }}>
+          {lifetime ? "Acesso vitalício" : "Pagamento da assinatura"}
+        </h2>
         <p className="muted">
-          A liberação acontece após a confirmação da BravoPay. Voltar para esta
-          página não altera o status da assinatura.
+          {lifetime
+            ? "Esta loja possui acesso sem vencimento e sem mensalidade."
+            : "A liberação acontece após a confirmação da BravoPay. Voltar para esta página não altera o status da assinatura."}
         </p>
         {charge && (
           <div className="stack">

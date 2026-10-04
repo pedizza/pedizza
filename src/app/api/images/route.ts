@@ -5,7 +5,7 @@ import { transaction, one } from "@/lib/db";
 import { apiError, json, verifyOrigin, rateLimit } from "@/lib/security/http";
 import { boundedBody } from "@/lib/security/body";
 import { detectMedia } from "@/lib/services/media";
-import { supabaseAdmin } from "@/lib/supabase/admin";
+import { privateFiles } from "@/lib/services/files";
 import { invariant } from "@/lib/errors";
 import { audit } from "@/lib/audit";
 const config = {
@@ -60,11 +60,17 @@ export async function GET(request: Request) {
       "Imagem não encontrada.",
       404,
     );
-    const { data, error } = await supabaseAdmin()
+    const { data, error } = await privateFiles()
       .storage.from(r.bucket)
-      .createSignedUrl(record.path, 60);
+      .download(record.path);
     invariant(data && !error, "Imagem indisponível.", 503);
-    return Response.redirect(data.signedUrl, 302);
+    return new Response(await data.arrayBuffer(), {
+      headers: {
+        "Content-Type": data.type,
+        "Cache-Control": "private, no-store",
+        "X-Content-Type-Options": "nosniff",
+      },
+    });
   } catch (e) {
     return apiError(e);
   }
@@ -87,7 +93,7 @@ export async function POST(request: Request) {
       .webp({ quality: 85 })
       .toBuffer();
     const path = `${ctx.tenantId}/${id}/${crypto.randomUUID()}.webp`;
-    const { error } = await supabaseAdmin()
+    const { error } = await privateFiles()
       .storage.from(r.bucket)
       .upload(path, image, { contentType: "image/webp", upsert: false });
     invariant(!error, "Não foi possível salvar a imagem.", 503);
@@ -109,11 +115,11 @@ export async function POST(request: Request) {
     });
     uploaded = undefined;
     if (old?.startsWith(ctx.tenantId + "/"))
-      await supabaseAdmin().storage.from(r.bucket).remove([old]);
+      await privateFiles().storage.from(r.bucket).remove([old]);
     return json({ ok: true });
   } catch (e) {
     if (uploaded)
-      await supabaseAdmin()
+      await privateFiles()
         .storage.from(uploaded.bucket)
         .remove([uploaded.path]);
     return apiError(e);

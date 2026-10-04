@@ -12,8 +12,10 @@ import {
 } from "@/app/auth/actions";
 export function AuthForm({
   mode,
+  token,
 }: {
   mode: "login" | "signup" | "recover" | "password";
+  token?: string;
 }) {
   const action = { login, signup, recover, password: updatePassword }[mode];
   const [state, submit, pending] = useActionState<AuthState, FormData>(
@@ -69,6 +71,7 @@ export function AuthForm({
               : "Acesse sua conta para cuidar da sua operação."}
           </p>
           <form action={submit}>
+            {token && <input type="hidden" name="token" value={token} />}
             {mode === "signup" && (
               <>
                 <label>

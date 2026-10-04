@@ -1,100 +1,79 @@
 "use client";
-import Image from "next/image";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { supabaseBrowser } from "@/lib/supabase/client";
 export function MasterMfa() {
-  const [factor, setFactor] = useState(""),
-    [qr, setQr] = useState(""),
+  const [enabled, setEnabled] = useState(false),
+    [loaded, setLoaded] = useState(false),
     [secret, setSecret] = useState(""),
     [code, setCode] = useState(""),
     [error, setError] = useState(""),
-    [busy, setBusy] = useState(false),
-    [loaded, setLoaded] = useState(false);
+    [busy, setBusy] = useState(false);
   const router = useRouter();
   useEffect(() => {
-    supabaseBrowser()
-      .auth.mfa.listFactors()
-      .then(({ data, error }) => {
-        if (error) setError("Não foi possível consultar seus fatores.");
-        else
-          setFactor(data.totp.find((f) => f.status === "verified")?.id || "");
+    fetch("/api/auth/mfa")
+      .then(async (r) => {
+        const b = await r.json();
+        if (!r.ok) throw Error(b.error);
+        setEnabled(b.enabled);
         setLoaded(true);
-      });
+      })
+      .catch((e) => setError(e.message));
   }, []);
-  async function enroll() {
+  async function action(action: string) {
     setBusy(true);
     setError("");
     try {
-      const { data, error } = await supabaseBrowser().auth.mfa.enroll({
-        factorType: "totp",
-        friendlyName: "Pedizza Master " + new Date().toISOString(),
+      const r = await fetch("/api/auth/mfa", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action,
+          ...(action === "verify" ? { code } : {}),
+        }),
       });
-      if (error)
-        throw Error(
-          "Não foi possível iniciar. Remova fatores pendentes na sua conta e tente novamente.",
-        );
-      setFactor(data.id);
-      setQr(
-        data.totp.qr_code.startsWith("data:")
-          ? data.totp.qr_code
-          : "data:image/svg+xml;charset=utf-8," +
-              encodeURIComponent(data.totp.qr_code),
-      );
-      setSecret(data.totp.secret);
+      const b = await r.json();
+      if (!r.ok) throw Error(b.error);
+      if (b.secret) setSecret(b.secret);
+      else {
+        setSecret("");
+        router.push("/master");
+        router.refresh();
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Tente novamente.");
     } finally {
       setBusy(false);
     }
   }
-  async function verify(e: React.FormEvent) {
-    e.preventDefault();
-    setBusy(true);
-    setError("");
-    const { error } = await supabaseBrowser().auth.mfa.challengeAndVerify({
-      factorId: factor,
-      code,
-    });
-    setBusy(false);
-    if (error) {
-      setError(
-        "Código inválido ou expirado. Confira o horário do autenticador.",
-      );
-      return;
-    }
-    setSecret("");
-    setQr("");
-    router.push("/master");
-    router.refresh();
-  }
   return (
     <div className="stack">
-      {error && (
-        <p role="alert" className="feedback">
-          {error}
-        </p>
-      )}
-      {loaded && !factor && (
-        <button className="btn" disabled={busy} onClick={enroll}>
+      {error && <p role="alert">{error}</p>}
+      {loaded && !enabled && !secret && (
+        <button
+          className="btn"
+          disabled={busy}
+          onClick={() => action("enroll")}
+        >
           Configurar autenticador
         </button>
       )}
-      {qr && (
+      {secret && (
         <>
-          <Image
-            src={qr}
-            unoptimized
-            width={240}
-            height={240}
-            alt="QR para configurar seu autenticador"
-          />
-          <p>Ou cadastre manualmente esta chave no autenticador:</p>
+          <p>
+            No aplicativo autenticador, adicione uma conta com chave manual,
+            tipo baseado em tempo (TOTP), nome Pedizza.
+          </p>
           <code style={{ overflowWrap: "anywhere" }}>{secret}</code>
         </>
       )}
-      {factor && (
-        <form className="stack" onSubmit={verify}>
+      {(enabled || secret) && (
+        <form
+          className="stack"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void action("verify");
+          }}
+        >
           <label>
             Código de 6 dígitos
             <input
@@ -108,7 +87,7 @@ export function MasterMfa() {
             />
           </label>
           <button className="btn" disabled={busy}>
-            {busy ? "Verificando…" : "Entrar no Master"}
+            Entrar no Master
           </button>
         </form>
       )}

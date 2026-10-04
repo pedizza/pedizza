@@ -1,12 +1,16 @@
 # Configuração e operação
 
-## Supabase
+## PostgreSQL e autenticação própria
 
-Preencher `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` e `SUPABASE_SERVICE_ROLE_KEY`. A chave de serviço é exclusiva do servidor; nunca usar prefixo `NEXT_PUBLIC_` nela. `DATABASE_URL` usa o pooler de transações e `DIRECT_URL` a conexão de migrations. Os nomes das duas variáveis também são comuns no Prisma, mas aqui o cliente SQL é `pg`.
+O Supabase hospeda apenas o banco PostgreSQL. Não são usadas chaves anon/service role nem o Supabase Auth. As contas ficam em `private.accounts`, as sessões em `private.sessions` e perfis/permissões nas tabelas de aplicação. `DATABASE_URL` usa o pooler e `DIRECT_URL` executa migrations.
 
-No Auth, habilitar confirmação de e-mail, configurar SMTP e cadastrar a URL do aplicativo e callbacks em produção e localhost. Para os templates de confirmação, recuperação e convite, usar um link para `/auth/confirm` contendo `token_hash={{ .TokenHash }}`, `type` apropriado (`signup`, `recovery` ou `invite`) e `redirect_to={{ .RedirectTo }}` codificado como parâmetro. O callback PKCE em `/auth/callback` também é suportado. Homologar convite e recuperação com o SMTP real antes de abrir cadastros.
+`JWT_SECRET` deve conter pelo menos 32 bytes aleatórios e ficar somente no servidor. O token HS256 valida emissor, audiência, assinatura e expiração de 8 horas. Cookie HttpOnly/SameSite=Lax e Secure em produção. A sessão é verificada no banco a cada requisição; logout, senha alterada ou bloqueio revogam acesso. Não há permissões confiadas a claims enviados pelo cliente.
 
-As migrations criam buckets privados `store-logos`, `menu-images` e `conversation-media`. Upload de imagem reencoda em WebP, elimina metadados e limita pixels. Anexos enviados pelo painel têm limite de 3 MB para caber no corpo de requisição serverless; mídias recebidas pelo provider têm limite de 20 MB. URLs de leitura expiram em 60 segundos.
+Senhas usam scrypt (N=32768, r=8, p=1) com salt aleatório. Master usa TOTP próprio com segredo criptografado e proteção contra repetição de código. `INTEGRATION_ENCRYPTION_KEY` deve ser preservada e protegida, pois também cifra os fatores TOTP.
+
+Configurar SMTP_HOST/PORT/USER/PASSWORD/FROM para confirmação de e-mail, recuperação e convites. Sem SMTP, contas provisionadas administrativamente conseguem entrar, mas cadastro público e recuperação mostram indisponibilidade. Links são aleatórios, têm validade e uso único. O operador pode provisionar uma conta com `node --env-file=.env.local --import tsx scripts/provision-account.mjs EMAIL NOME master|lifetime`, fornecendo a senha por stdin, nunca em argumentos ou no repositório.
+
+Arquivos são guardados na tabela privada `private.files` e servidos por rotas que verificam sessão e tenant. Não há dependência do Supabase Storage. O painel envia até 3 MB e imagens são reencodadas. O armazenamento consome a cota do banco; mídias recebidas continuam limitadas a 20 MB. Atualizações das telas usam consultas autenticadas a cada 5 segundos, pausadas quando a aba está oculta, sem conexão direta ao Supabase Realtime.
 
 Executar `npm run db:migrate`. O script valida o checksum das migrations já executadas, guarda inventário local do schema e utiliza transação/advisory lock. Não editar migrations aplicadas. Fazer backup externo do banco e Storage antes de migrações em uma operação existente. O inventário `.local/backups` não é backup dos dados.
 
@@ -48,7 +52,7 @@ Webhooks são persistidos antes da resposta e processados em `after()`. Filas us
 
 Acesso depende exclusivamente da tabela privada `private.super_admins`, não do papel owner ou metadata de cadastro. Depois de confirmar o e-mail do administrador, o operador do banco pode inserir seu UUID nessa tabela. Essa operação não está exposta na aplicação. Não há promoção automática de quem se cadastra primeiro.
 
-`/master` oferece visão da plataforma, suspensão por motivo, auditoria e suporte somente para consulta, por sessão de 15 minutos. Remover uma suspensão administrativa não cria um período pago. O Master exige sessão AAL2; `/master/seguranca` permite configurar e confirmar TOTP. Homologar recuperação de acesso com o operador do Supabase. Suporte com alteração operacional não é oferecido.
+`/master` oferece visão da plataforma, suspensão por motivo, auditoria e suporte somente para consulta, por sessão de 15 minutos. Remover uma suspensão administrativa não cria um período pago. O Master exige sessão AAL2; `/master/seguranca` permite configurar e confirmar TOTP. Homologar recuperação de acesso com o operador do banco. Suporte com alteração operacional não é oferecido.
 
 ## Publicação
 

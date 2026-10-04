@@ -5,7 +5,7 @@ import { transaction, one } from "@/lib/db";
 import { apiError, json, verifyOrigin, rateLimit } from "@/lib/security/http";
 import { boundedBody } from "@/lib/security/body";
 import { storeMedia } from "@/lib/services/media";
-import { supabaseAdmin } from "@/lib/supabase/admin";
+import { privateFiles } from "@/lib/services/files";
 import { invariant } from "@/lib/errors";
 import { enqueue } from "@/lib/services/events";
 export async function GET(request: Request) {
@@ -26,11 +26,20 @@ export async function GET(request: Request) {
       "Anexo não encontrado.",
       404,
     );
-    const { data, error } = await supabaseAdmin()
+    const { data, error } = await privateFiles()
       .storage.from("conversation-media")
-      .createSignedUrl(m.media_path, 60, { download: m.media_name || "anexo" });
+      .download(m.media_path);
     invariant(data && !error, "Anexo indisponível.", 503);
-    return Response.redirect(data.signedUrl, 302);
+    return new Response(await data.arrayBuffer(), {
+      headers: {
+        "Content-Type": data.type,
+        "Cache-Control": "private, no-store",
+        "Content-Disposition":
+          "attachment; filename*=UTF-8\'\'" +
+          encodeURIComponent(m.media_name || "anexo"),
+        "X-Content-Type-Options": "nosniff",
+      },
+    });
   } catch (e) {
     return apiError(e);
   }
@@ -91,7 +100,7 @@ export async function POST(request: Request) {
     return json({ ok: true });
   } catch (e) {
     if (stored)
-      await supabaseAdmin().storage.from("conversation-media").remove([stored]);
+      await privateFiles().storage.from("conversation-media").remove([stored]);
     return apiError(e);
   }
 }

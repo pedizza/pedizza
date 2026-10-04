@@ -18,7 +18,7 @@ export async function GET(request: Request) {
       throw new AppError(401, "Acesso negado.");
     await transaction(async (db) => {
       await db.query(
-        "update public.subscriptions set status='past_due',updated_at=now() where status='active' and current_period_end<=now()",
+        "update public.subscriptions set status='past_due',updated_at=now() where status='active' and not lifetime_access and current_period_end<=now()",
       );
       await db.query(
         "update public.carts set status='expired' where status='active' and expires_at<now()",

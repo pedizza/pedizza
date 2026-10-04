@@ -4,7 +4,7 @@ Site de acompanhamento: https://pedizza.vercel.app · Local: http://localhost:30
 
 Gestão multi-tenant para pizzarias: cardápio, entrega, pedidos via WhatsApp, atendimento, equipe, pagamentos e assinatura SaaS.
 
-**Estado:** implementação em validação. As telas públicas e os testes locais funcionam. Login, mídia, provedores e cobrança precisam das credenciais e da homologação descritas em [operação](docs/OPERACAO.md). Não usar para cobrar clientes antes de concluir essa homologação.
+**Estado:** implementação em validação. Login próprio e acesso vitalício foram implementados. Provedores e cobrança precisam das credenciais e da homologação descritas em [operação](docs/OPERACAO.md). Não usar para cobrar clientes antes de concluir essa homologação.
 
 ## Executar
 
@@ -31,10 +31,10 @@ npm run test:e2e    # servidor localhost já iniciado
 - `src/lib/domain`: dinheiro em centavos, horários, documentos e transições.
 - `src/lib/services`: preço, pedidos, chatbot persistente, filas e notificações.
 - `src/lib/integrations`: Evolution, ViaCEP/Geoapify, Mercado Pago, BravoPay e OpenAI.
-- `supabase/migrations`: schema, permissões, RLS, integridade e Storage.
+- `supabase/migrations`: schema, permissões, RLS, integridade e arquivos privados.
 - `tests`: domínio, criptografia, PostgreSQL embutido e navegador.
 
-O acesso de conta usa Supabase Auth. O backend usa `pg` e transações explícitas. Leituras de conta executam com papel `authenticated` e RLS; escritas usam endpoints com autorização, tenant validado, validação de regras e auditoria. As permissões de escrita direta do navegador foram revogadas. Este projeto não depende de Prisma.
+O acesso de conta usa autenticação própria JWT (HS256), senha scrypt e sessões revogáveis no PostgreSQL. Não utiliza Supabase Auth nem chaves anon/service role. O backend usa `pg` e transações explícitas. Leituras de conta executam com papel `authenticated` e RLS; escritas usam endpoints com autorização, tenant validado, validação de regras e auditoria. As permissões de escrita direta do navegador foram revogadas. Este projeto não depende de Prisma.
 
 Os dados de teste vivem apenas no PostgreSQL isolado dos testes. Não há lojas, pedidos ou integrações fictícias na aplicação.
 

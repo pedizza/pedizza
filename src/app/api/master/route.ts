@@ -73,7 +73,7 @@ export async function GET(request: Request) {
         return {
           overview: await one(
             db,
-            "select (select count(*)::int from public.tenants) tenants,(select count(*)::int from public.subscriptions where status='active' and current_period_end>now()) active,(select coalesce(sum(amount_cents),0)::bigint from private.billing_charges where status='paid' and credited_at>=date_trunc('month',now())) paid_month_cents,(select count(*)::int from private.webhook_events where status='failed') failed_webhooks,(select count(*)::int from private.outbox where status='failed') failed_jobs",
+            "select (select count(*)::int from public.tenants) tenants,(select count(*)::int from public.subscriptions where status='active' and (lifetime_access or current_period_end>now())) active,(select coalesce(sum(amount_cents),0)::bigint from private.billing_charges where status='paid' and credited_at>=date_trunc('month',now())) paid_month_cents,(select count(*)::int from private.webhook_events where status='failed') failed_webhooks,(select count(*)::int from private.outbox where status='failed') failed_jobs",
           ),
           tenants: await rows(
             db,
