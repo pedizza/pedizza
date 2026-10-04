@@ -7,6 +7,15 @@ export default async function Page({
   const p = await searchParams;
   return (
     <ModulePage
+      hideHeader
+      groups={[
+        { label: "Produtos", keys: ["produtos", "tamanhos", "precos"] },
+        { label: "Categorias", keys: ["categorias"] },
+        {
+          label: "Bordas",
+          keys: ["bordas", "borda-categorias", "borda-precos"],
+        },
+      ]}
       title="Cardápio"
       description="Cada sabor, tamanho e detalhe da sua pizzaria."
       tabs={[
