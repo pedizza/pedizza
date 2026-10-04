@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import { QRCodeSVG } from "qrcode.react";
 import { Copy, CheckCircle2, ShieldCheck } from "lucide-react";
 import { formatCurrency } from "@/lib/domain/money";
 export function Billing({
@@ -27,6 +28,8 @@ export function Billing({
     [copied, setCopied] = useState(false);
   async function create() {
     setBusy(true);
+    setError("");
+    setCopied(false);
     try {
       const r = await fetch("/api/billing", {
         method: "POST",
@@ -118,6 +121,23 @@ export function Billing({
         {charge && (
           <div className="stack">
             <strong>{formatCurrency(charge.amount_cents)}</strong>
+            {charge.pix_copy_paste && (
+              <figure style={{ margin: "8px 0", textAlign: "center" }}>
+                <QRCodeSVG
+                  value={charge.pix_copy_paste}
+                  size={280}
+                  marginSize={4}
+                  level="M"
+                  title="QR Code para pagar a assinatura via PIX"
+                  role="img"
+                  style={{ maxWidth: "100%", height: "auto" }}
+                />
+                <figcaption className="muted">
+                  Abra o aplicativo do seu banco e escaneie o QR Code para
+                  pagar.
+                </figcaption>
+              </figure>
+            )}
             <label>
               PIX copia e cola
               <textarea readOnly value={charge.pix_copy_paste || ""} />
