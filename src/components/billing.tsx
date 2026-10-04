@@ -116,7 +116,7 @@ export function Billing({
         <p className="muted">
           {lifetime
             ? "Esta loja possui acesso sem vencimento e sem mensalidade."
-            : "A liberação acontece após a confirmação da BravoPay. Voltar para esta página não altera o status da assinatura."}
+            : "A liberação acontece após a confirmação do pagamento. Voltar para esta página não altera o status da assinatura."}
         </p>
         {charge && (
           <div className="stack">
