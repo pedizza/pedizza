@@ -423,8 +423,6 @@ export async function processBotMessage(
     } else if (
       normalized === "mais" &&
       [
-        "awaiting_category",
-        "browsing_category",
         "awaiting_second_flavor",
         "awaiting_size",
         "awaiting_border",
@@ -434,8 +432,6 @@ export async function processBotMessage(
       context.page = (context.page || 0) + 1;
       const kind = (
         {
-          awaiting_category: "category",
-          browsing_category: "category",
           awaiting_second_flavor: "second",
           awaiting_size: "size",
           awaiting_border: "border",
@@ -466,7 +462,10 @@ export async function processBotMessage(
       )[step];
       reply =
         (prompts[step] || prompts.main_menu) +
-        (previousKind ? "\n" + (await options(previousKind)) : "");
+        (previousKind
+          ? (step === "browsing_category" ? "\n\n" : "\n") +
+            (await options(previousKind))
+          : "");
     } else
       switch (step) {
         case "main_menu":
@@ -485,7 +484,7 @@ export async function processBotMessage(
           } else if (mainMenuOption(normalized) === "2") {
             step = "browsing_category";
             context.page = 0;
-            reply = prompts[step] + "\n" + (await options("category"));
+            reply = prompts[step] + "\n\n" + (await options("category"));
           } else if (mainMenuOption(normalized) === "1") {
             if (!isOpen) {
               reply =
@@ -723,7 +722,7 @@ export async function processBotMessage(
           break;
         case "browsing_category":
           if (!selected()) {
-            reply = prompts[step] + "\n" + (await options("category"));
+            reply = prompts[step] + "\n\n" + (await options("category"));
             break;
           }
           context.categoryId = selected()!.id;
