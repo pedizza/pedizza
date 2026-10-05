@@ -193,6 +193,31 @@ export async function processBotMessage(
       "select private.subscription_active($1) active",
       [tenant],
     );
+    if (
+      normalized === "reiniciar" &&
+      !customer?.blocked &&
+      access?.active
+    ) {
+      await db.query(
+        "update public.carts set status='cancelled' where tenant_id=$1 and conversation_id=$2 and status='active'",
+        [tenant, c.id],
+      );
+      await db.query(
+        "update public.conversations set status='bot',bot_paused=false,bot_epoch=bot_epoch+1,current_step='main_menu',context='{}'::jsonb,version=version+1,assigned_user_id=null,archived_at=null where tenant_id=$1 and id=$2",
+        [tenant, c.id],
+      );
+      await db.query(
+        "update public.conversation_messages set processed_at=now() where tenant_id=$1 and id=$2",
+        [tenant, messageId],
+      );
+      await enqueue(db, tenant, "message", "bot:" + messageId, {
+        conversationId: c.id,
+        sender: "bot",
+        text: "Fluxo reiniciado.\n" + prompts.main_menu,
+        epoch: c.bot_epoch + 1,
+      });
+      return;
+    }
     if (c.bot_paused || customer?.blocked || !access?.active) {
       await db.query(
         "update public.conversation_messages set processed_at=now() where tenant_id=$1 and id=$2",
