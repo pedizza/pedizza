@@ -5,7 +5,7 @@ import {
   getNextOpeningTime,
   validateHours,
 } from "@/lib/domain/hours";
-import { canTransition } from "@/lib/domain/orders";
+import { canConfirmManually, canTransition } from "@/lib/domain/orders";
 import { normalizePhone, validDocument } from "@/lib/domain/normalization";
 describe("domain invariants", () => {
   it("money stays in integer cents", () => {
@@ -65,6 +65,13 @@ describe("domain invariants", () => {
       false,
     );
     expect(canTransition("delivered", "cancelled", "delivery")).toBe(false);
+  });
+  it("only manual payment methods allow receipt confirmation", () => {
+    expect(canConfirmManually("cash")).toBe(true);
+    expect(canConfirmManually("pix_manual")).toBe(true);
+    expect(canConfirmManually("credit_on_delivery")).toBe(true);
+    expect(canConfirmManually("pix_mercado_pago")).toBe(false);
+    expect(canConfirmManually("provider_future", true)).toBe(true);
   });
   it("phone and Brazilian documents are validated", () => {
     expect(normalizePhone("(11) 99999-9999")).toBe("5511999999999");

@@ -2,7 +2,12 @@ import "server-only";
 import { transaction, rows, one, type DB } from "@/lib/db";
 import { authorize, type TenantContext } from "@/lib/auth/context";
 import { invariant } from "@/lib/errors";
-import { canTransition, orderLabels, paymentLabels } from "@/lib/domain/orders";
+import {
+  canConfirmManually,
+  canTransition,
+  orderLabels,
+  paymentLabels,
+} from "@/lib/domain/orders";
 import { formatCurrency } from "@/lib/domain/money";
 import { getStoreOpenStatus, type BusinessHour } from "@/lib/domain/hours";
 import { priceCart } from "./pricing";
@@ -342,17 +347,30 @@ export async function changeOrder(
 export async function confirmManualPayment(ctx: TenantContext, id: string) {
   return transaction(async (db) => {
     await authorize(db, ctx, "payments.confirm_manual");
-    const p = await one<{ id: string; status: string }>(
+    const p = await one<{
+      id: string;
+      status: string;
+      order_payment_status: string;
+      payment_method_type: string;
+      requires_manual_confirmation: boolean | null;
+    }>(
       db,
-      "select id,status from public.payments where tenant_id=$1 and order_id=$2 for update",
+      "select p.id,p.status,o.payment_status order_payment_status,o.payment_method_type,m.requires_manual_confirmation from public.payments p join public.orders o on o.tenant_id=p.tenant_id and o.id=p.order_id left join public.payment_methods m on m.tenant_id=o.tenant_id and m.id=o.payment_method_id where p.tenant_id=$1 and p.order_id=$2 for update of p,o",
       [ctx.tenantId, id],
     );
     invariant(
       p &&
-        ["awaiting_manual_confirmation", "pay_on_delivery"].includes(p.status),
+        canConfirmManually(
+          p.payment_method_type,
+          p.requires_manual_confirmation || false,
+        ) &&
+        p.status !== "refunded" &&
+        p.order_payment_status !== "refunded",
       "Pagamento não pode ser confirmado manualmente.",
       409,
     );
+    if (p.status === "paid" && p.order_payment_status === "paid")
+      return { ok: true };
     await db.query(
       "update public.payments set status='paid',paid_at=now(),confirmed_by=$3 where tenant_id=$1 and id=$2",
       [ctx.tenantId, p.id, ctx.userId],

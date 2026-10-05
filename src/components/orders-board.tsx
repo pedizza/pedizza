@@ -81,6 +81,7 @@ export function OrdersBoard({
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!action) return;
+    setError("");
     setBusy(true);
     const printWindow =
       autoPrint && action.status === "accepted"
@@ -105,6 +106,7 @@ export function OrdersBoard({
         printWindow.location.href = `/app/pedidos/${action.order.id}/imprimir?auto=1`;
       setAction(null);
       setDetail(null);
+      setError("");
       await load();
     } catch (e) {
       printWindow?.close();

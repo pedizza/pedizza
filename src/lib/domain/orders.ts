@@ -40,3 +40,20 @@ export function canTransition(from: string, to: string, service: string) {
 }
 export const isCompleted = (s: string) =>
   s === "delivered" || s === "picked_up";
+
+const manualPaymentTypes = new Set([
+  "cash",
+  "pix_manual",
+  "credit_on_delivery",
+  "debit_on_delivery",
+  "custom_manual",
+]);
+
+export function canConfirmManually(
+  paymentMethodType: string,
+  requiresManualConfirmation = false,
+) {
+  return (
+    requiresManualConfirmation || manualPaymentTypes.has(paymentMethodType)
+  );
+}
