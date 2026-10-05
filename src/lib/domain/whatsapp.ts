@@ -41,5 +41,23 @@ export function extractWhatsAppMessageText(
     }
   }
 
+  const pollUpdate = record(message.pollUpdateMessage);
+  if (pollUpdate) {
+    const vote = record(pollUpdate.vote);
+    const selectedOptions = Array.isArray(vote?.selectedOptions)
+      ? vote.selectedOptions
+      : [];
+    const selected = selectedOptions.find(
+      (option): option is string => typeof option === "string",
+    );
+    return (
+      {
+        "Fazer pedido": "1",
+        "Ver cardápio": "2",
+        "Acompanhar pedido": "3",
+      }[selected || ""] || "menu"
+    );
+  }
+
   return "";
 }

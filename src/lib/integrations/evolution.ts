@@ -94,31 +94,21 @@ export async function sendText(name: string, phone: string, text: string) {
   return z.object({ key: z.object({ id: z.string() }) }).parse(response).key.id;
 }
 
-export const whatsAppButtonsSchema = z.object({
-  title: z.string().min(1).max(60),
-  description: z.string().max(1024).default(""),
-  footer: z.string().max(60).default(""),
-  buttons: z
-    .array(
-      z.object({
-        type: z.literal("reply"),
-        displayText: z.string().min(1).max(25),
-        id: z.string().min(1).max(200),
-      }),
-    )
-    .min(1)
-    .max(3),
+export const whatsAppPollSchema = z.object({
+  name: z.string().min(1).max(255),
+  selectableCount: z.literal(1),
+  values: z.array(z.string().min(1).max(100)).min(2).max(10),
 });
-export type WhatsAppButtons = z.infer<typeof whatsAppButtonsSchema>;
+export type WhatsAppPoll = z.infer<typeof whatsAppPollSchema>;
 
-export async function sendButtons(
+export async function sendPoll(
   name: string,
   phone: string,
-  buttons: WhatsAppButtons,
+  poll: WhatsAppPoll,
 ) {
   const response = await evolution(
-    `/message/sendButtons/${instancePath(name)}`,
-    { number: phone, ...whatsAppButtonsSchema.parse(buttons) },
+    `/message/sendPoll/${instancePath(name)}`,
+    { number: phone, ...whatsAppPollSchema.parse(poll) },
   );
   return z.object({ key: z.object({ id: z.string() }) }).parse(response).key.id;
 }

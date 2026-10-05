@@ -94,5 +94,12 @@ describe("domain invariants", () => {
         },
       }),
     ).toBe("3");
+    expect(
+      extractWhatsAppMessageText({
+        pollUpdateMessage: {
+          vote: { selectedOptions: ["Fazer pedido"] },
+        },
+      }),
+    ).toBe("1");
   });
 });
