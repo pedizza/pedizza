@@ -61,7 +61,7 @@ const prompts: Record<string, string> = {
   awaiting_address_confirmation:
     "Confirme o endereço e a taxa:\n1 — Confirmar\n2 — Corrigir CEP",
   awaiting_category: "Escolha uma categoria:",
-  browsing_category: "Escolha uma categoria para ver o cardápio:",
+  browsing_category: "*Escolha uma categoria para ver o cardápio:*",
   awaiting_product: "Escolha um produto:",
   awaiting_size: "Escolha o tamanho:",
   awaiting_split: "Deseja dois sabores?\n1 — Sim\n2 — Apenas este sabor",
@@ -299,7 +299,7 @@ export async function processBotMessage(
       context.page = context.page || 0;
       if (kind === "category")
         sql =
-          "select id,name from public.menu_categories where tenant_id=$1 and active and archived_at is null order by sort_order,id limit 8 offset $2";
+          "select id,name from public.menu_categories where tenant_id=$1 and active and archived_at is null order by sort_order,id";
       if (kind === "product" || kind === "second") {
         sql =
           "select id,name from public.menu_items where tenant_id=$1 and category_id=$2 and active and available and archived_at is null order by sort_order,id limit 8 offset $3";
@@ -318,7 +318,7 @@ export async function processBotMessage(
       if (kind === "payment")
         sql =
           "select id,name from public.payment_methods where tenant_id=$1 and active and type<>'pix_mercado_pago' and archived_at is null order by sort_order,id limit 8 offset $2";
-      params.push(context.page * 8);
+      if (kind !== "category") params.push(context.page * 8);
       context.options = await rows<{ id: string; name: string }>(
         db,
         sql,
@@ -326,7 +326,7 @@ export async function processBotMessage(
       );
       return (
         context.options.map((o, i) => `${i + 1} — ${o.name}`).join("\n") +
-        (context.options.length === 8
+        (kind !== "category" && context.options.length === 8
           ? "\nDigite MAIS para ver outras opções."
           : "")
       );
