@@ -14,6 +14,7 @@ import {
   removeResource,
   archivePermission,
   setProductAvailability,
+  setBorderGroupActive,
 } from "@/lib/modules/service";
 import { AppError } from "@/lib/errors";
 type Context = { params: Promise<{ resource: string }> };
@@ -71,24 +72,43 @@ export async function PATCH(request: Request, { params }: Context) {
   try {
     verifyOrigin(request);
     const { resource } = await params;
-    if (resource !== "produtos")
+    if (!["produtos", "bordas"].includes(resource))
       throw new AppError(404, "Ação não disponível.");
     const r = resourceFor(resource);
     const ctx = await requireTenant(r.write);
     await rateLimit(ctx.userId + ":write", 90);
+    const body = await readJson(request);
+    if (resource === "produtos") {
+      const input = z
+        .object({
+          id: z.uuid(),
+          available: z.boolean(),
+          updated_at: z.string().optional(),
+        })
+        .strict()
+        .parse(body);
+      return json(
+        await setProductAvailability(
+          ctx,
+          input.id,
+          input.available,
+          input.updated_at,
+        ),
+      );
+    }
     const input = z
       .object({
         id: z.uuid(),
-        available: z.boolean(),
+        active: z.boolean(),
         updated_at: z.string().optional(),
       })
       .strict()
-      .parse(await readJson(request));
+      .parse(body);
     return json(
-      await setProductAvailability(
+      await setBorderGroupActive(
         ctx,
         input.id,
-        input.available,
+        input.active,
         input.updated_at,
       ),
     );

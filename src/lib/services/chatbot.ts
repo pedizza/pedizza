@@ -243,7 +243,7 @@ export async function processBotMessage(
       }
       if (kind === "border") {
         sql =
-          "select b.id,b.name from public.menu_borders b join public.menu_border_categories c on c.tenant_id=b.tenant_id and c.border_id=b.id where b.tenant_id=$1 and c.category_id=$2 and b.active and b.archived_at is null order by b.name limit 8 offset $3";
+          "select b.id,g.name || ' — ' || b.name name from public.menu_borders b join public.menu_border_groups g on g.tenant_id=b.tenant_id and g.id=b.group_id join public.menu_border_group_categories c on c.tenant_id=g.tenant_id and c.group_id=g.id where b.tenant_id=$1 and c.category_id=$2 and b.active and g.active and b.archived_at is null and g.archived_at is null order by g.sort_order,g.name,b.sort_order,b.name limit 8 offset $3";
         params.push(context.categoryId);
       }
       if (kind === "payment")

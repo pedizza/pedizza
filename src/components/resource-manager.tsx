@@ -10,6 +10,7 @@ import {
   Copy,
   Pause,
   Play,
+  Trash2,
 } from "lucide-react";
 import { resources, optionLabels, type Field } from "@/lib/modules/registry";
 import { formatCurrency, parseCurrency } from "@/lib/domain/money";
@@ -18,8 +19,13 @@ import { ReferenceSelect } from "./reference-select";
 import { ImageUpload } from "./image-upload";
 import Link from "next/link";
 import type { ProductSize } from "@/lib/modules/product-sizes";
+import type { BorderOption } from "@/lib/modules/border-groups";
 import { EmptyState } from "./ui/states";
 type Row = Record<string, unknown> & { id: string; updated_at: string };
+type EditableBorderOption = BorderOption & {
+  rowId: string;
+  price: string;
+};
 export function ResourceManager({
   resourceKey,
   canEdit,
@@ -37,6 +43,8 @@ export function ResourceManager({
   const [sizes, setSizes] = useState<
     (ProductSize & { rowId: string; price: string })[]
   >([]);
+  const [borderOptions, setBorderOptions] = useState<EditableBorderOption[]>([]);
+  const [borderCategoryIds, setBorderCategoryIds] = useState<string[]>([]);
   function updateSize(index: number, patch: Partial<(typeof sizes)[number]>) {
     setSizes((current) =>
       current.map((size, i) => (i === index ? { ...size, ...patch } : size)),
@@ -126,6 +134,28 @@ export function ResourceManager({
         price: (size.price_cents / 100).toFixed(2).replace(".", ","),
       })),
     );
+    setBorderOptions(
+      row
+        ? ((row.options || []) as BorderOption[]).map((option) => ({
+            ...option,
+            rowId: crypto.randomUUID(),
+            price: (option.price_cents / 100).toFixed(2).replace(".", ","),
+          }))
+        : [
+            {
+              rowId: crypto.randomUUID(),
+              name: "",
+              description: "",
+              price: "",
+              price_cents: 0,
+              active: true,
+              sort_order: 0,
+            },
+          ],
+    );
+    setBorderCategoryIds(
+      row ? ((row.category_ids || []) as string[]) : [],
+    );
     setEditing(row);
     setDirty(false);
     setOpen(true);
@@ -174,6 +204,17 @@ export function ResourceManager({
           max_flavors: size.max_flavors,
           price_cents: parseCurrency(size.price),
         }));
+      }
+      if (resourceKey === "bordas") {
+        payload.options = borderOptions.map((option, index) => ({
+          ...(option.id ? { id: option.id } : {}),
+          name: option.name,
+          description: option.description,
+          price_cents: parseCurrency(option.price),
+          active: option.active,
+          sort_order: index,
+        }));
+        payload.category_ids = borderCategoryIds;
       }
       const r = await fetch(`/api/data/${resourceKey}`, {
         method: "POST",
@@ -245,6 +286,38 @@ export function ResourceManager({
         e instanceof Error
           ? e.message
           : "Não foi possível alterar o produto.",
+      );
+    } finally {
+      setToggling(null);
+    }
+  }
+  async function toggleBorderGroup(row: Row) {
+    const active = !Boolean(row.active);
+    setToggling(row.id);
+    setError("");
+    try {
+      const response = await fetch(`/api/data/${resourceKey}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: row.id,
+          active,
+          updated_at: row.updated_at,
+        }),
+      });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error);
+      setData((current) =>
+        current.map((item) =>
+          item.id === row.id
+            ? { ...item, active, updated_at: body.updated_at }
+            : item,
+        ),
+      );
+      setToast(active ? "Borda reativada." : "Borda pausada.");
+    } catch (e) {
+      setError(
+        e instanceof Error ? e.message : "Não foi possível alterar a borda.",
       );
     } finally {
       setToggling(null);
@@ -410,13 +483,22 @@ export function ResourceManager({
               <span>Ações</span>
             </div>
           )}
+          {resourceKey === "bordas" && (
+            <div className="border-list-head" aria-hidden="true">
+              <span>Imagem</span>
+              <span>Tipo de borda</span>
+              <span>Sabores e valores</span>
+              <span>Ações</span>
+            </div>
+          )}
           {data.map((row) => (
             <article
-              className={`data-row ${resourceKey === "produtos" ? "product-row" : resourceKey === "categorias" ? "category-row" : ""}`}
+              className={`data-row ${resourceKey === "produtos" ? "product-row" : resourceKey === "categorias" ? "category-row" : resourceKey === "bordas" ? "border-row" : ""}`}
               key={row.id}
             >
               {(resourceKey === "produtos" ||
-                resourceKey === "categorias") && (
+                resourceKey === "categorias" ||
+                resourceKey === "bordas") && (
                 <div className="catalog-image">
                   <ImageUpload
                     resource={resourceKey}
@@ -447,6 +529,15 @@ export function ResourceManager({
                 {resourceKey === "categorias" && (
                   <p>{String(row.description || "Sem descrição")}</p>
                 )}
+                {resourceKey === "bordas" && (
+                  <>
+                    <p>{String(row.description || "Sem descrição")}</p>
+                    <span className="border-categories">
+                      {((row.category_names || []) as string[]).join(" · ") ||
+                        "Nenhuma categoria"}
+                    </span>
+                  </>
+                )}
                 {resourceKey === "regras-precos" && (
                   <span className={`badge ${row.allow_split ? "green" : ""}`}>
                     {row.allow_split
@@ -455,7 +546,8 @@ export function ResourceManager({
                   </span>
                 )}
                 {resourceKey !== "produtos" &&
-                  resourceKey !== "categorias" && (
+                  resourceKey !== "categorias" &&
+                  resourceKey !== "bordas" && (
                   <p>
                     {resource.fields
                       .filter(
@@ -509,6 +601,32 @@ export function ResourceManager({
                             ? "Não definido"
                             : formatCurrency(Number(size.price_cents))}
                         </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+              {resourceKey === "bordas" && (
+                <table
+                  className="border-options-table"
+                  aria-label={`Sabores e valores de ${label(row)}`}
+                >
+                  <thead>
+                    <tr>
+                      <th>Sabor</th>
+                      <th>Valor</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {((row.options || []) as BorderOption[]).map((option) => (
+                      <tr key={option.id || option.name}>
+                        <td>
+                          {option.name}
+                          {!option.active && (
+                            <span className="badge amber">Pausado</span>
+                          )}
+                        </td>
+                        <td>{formatCurrency(option.price_cents)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -575,6 +693,27 @@ export function ResourceManager({
                         </button>
                       </>
                     )}
+                    {resourceKey === "bordas" && (
+                      <button
+                        className={`icon-button ${row.active ? "" : "resume-action"}`}
+                        aria-label={
+                          row.active
+                            ? `Pausar ${label(row)}`
+                            : `Reativar ${label(row)}`
+                        }
+                        title={
+                          row.active ? "Pausar borda" : "Reativar borda"
+                        }
+                        disabled={toggling === row.id}
+                        onClick={() => void toggleBorderGroup(row)}
+                      >
+                        {row.active ? (
+                          <Pause size={15} />
+                        ) : (
+                          <Play size={15} />
+                        )}
+                      </button>
+                    )}
                   </>
                 )}
                 {canArchive && (
@@ -617,6 +756,7 @@ export function ResourceManager({
       <ResponsiveModal
         open={open}
         title={`${editing ? "Editar" : "Adicionar"} ${resource.singular}`}
+        wide={resourceKey === "bordas"}
         onClose={() => {
           if (!busy) setOpen(false);
         }}
@@ -822,6 +962,136 @@ export function ResourceManager({
                 Adicionar tamanho
               </button>
             </fieldset>
+          )}
+          {resourceKey === "bordas" && (
+            <>
+              <fieldset className="border-category-picker">
+                <legend>Categorias permitidas *</legend>
+                <p>Selecione onde este tipo de borda poderá ser escolhido.</p>
+                <div className="choice-grid">
+                  {categories.map((category) => (
+                    <label className="checkbox-label" key={category.id}>
+                      <input
+                        type="checkbox"
+                        checked={borderCategoryIds.includes(category.id)}
+                        onChange={(event) => {
+                          setBorderCategoryIds((current) =>
+                            event.target.checked
+                              ? [...current, category.id]
+                              : current.filter((id) => id !== category.id),
+                          );
+                          setDirty(true);
+                        }}
+                      />
+                      {category.name}
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+              <div className="border-options-editor">
+                <div className="row between">
+                  <div>
+                    <strong>Sabores e valores *</strong>
+                    <p>Cadastre as opções oferecidas neste tipo de borda.</p>
+                  </div>
+                  <button
+                    type="button"
+                    className="btn secondary small"
+                    onClick={() => {
+                      setBorderOptions((current) => [
+                        ...current,
+                        {
+                          rowId: crypto.randomUUID(),
+                          name: "",
+                          description: "",
+                          price: "",
+                          price_cents: 0,
+                          active: true,
+                          sort_order: current.length,
+                        },
+                      ]);
+                      setDirty(true);
+                    }}
+                  >
+                    <Plus size={15} /> Adicionar sabor
+                  </button>
+                </div>
+                <div className="border-option-list">
+                  {borderOptions.map((option, index) => (
+                    <div className="border-option-editor" key={option.rowId}>
+                      <label>
+                        Sabor *
+                        <input
+                          required
+                          maxLength={120}
+                          value={option.name}
+                          onChange={(event) => {
+                            setBorderOptions((current) =>
+                              current.map((item, itemIndex) =>
+                                itemIndex === index
+                                  ? { ...item, name: event.target.value }
+                                  : item,
+                              ),
+                            );
+                            setDirty(true);
+                          }}
+                        />
+                      </label>
+                      <label>
+                        Valor *
+                        <input
+                          required
+                          inputMode="decimal"
+                          placeholder="0,00"
+                          value={option.price}
+                          onChange={(event) => {
+                            setBorderOptions((current) =>
+                              current.map((item, itemIndex) =>
+                                itemIndex === index
+                                  ? { ...item, price: event.target.value }
+                                  : item,
+                              ),
+                            );
+                            setDirty(true);
+                          }}
+                        />
+                      </label>
+                      <label className="checkbox-label border-option-active">
+                        <input
+                          type="checkbox"
+                          checked={option.active}
+                          onChange={(event) => {
+                            setBorderOptions((current) =>
+                              current.map((item, itemIndex) =>
+                                itemIndex === index
+                                  ? { ...item, active: event.target.checked }
+                                  : item,
+                              ),
+                            );
+                            setDirty(true);
+                          }}
+                        />
+                        Ativo
+                      </label>
+                      <button
+                        type="button"
+                        className="icon-button"
+                        aria-label={`Remover sabor ${option.name || index + 1}`}
+                        disabled={borderOptions.length === 1}
+                        onClick={() => {
+                          setBorderOptions((current) =>
+                            current.filter((_, itemIndex) => itemIndex !== index),
+                          );
+                          setDirty(true);
+                        }}
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </>
           )}
           {error && (
             <p className="feedback" role="alert">

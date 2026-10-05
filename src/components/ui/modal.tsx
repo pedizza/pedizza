@@ -6,11 +6,13 @@ export function ResponsiveModal({
   title,
   onClose,
   children,
+  wide = false,
 }: {
   open: boolean;
   title: string;
   onClose: () => void;
   children: React.ReactNode;
+  wide?: boolean;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => {
@@ -28,7 +30,7 @@ export function ResponsiveModal({
   return (
     <dialog
       ref={ref}
-      className="modal"
+      className={`modal ${wide ? "wide" : ""}`}
       onCancel={(event) => {
         event.preventDefault();
         onClose();

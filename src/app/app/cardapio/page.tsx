@@ -5,6 +5,11 @@ export default async function Page({
   searchParams: Promise<{ tab?: string }>;
 }) {
   const p = await searchParams;
+  const selected = ["produtos", "categorias", "bordas", "regras-precos"].includes(
+    p.tab || "",
+  )
+    ? p.tab!
+    : "produtos";
   return (
     <ModulePage
       hideHeader
@@ -14,10 +19,9 @@ export default async function Page({
         { key: "produtos", label: "Produtos" },
         { key: "categorias", label: "Categorias" },
         { key: "bordas", label: "Bordas" },
-        { key: "borda-categorias", label: "Categorias das Bordas" },
         { key: "regras-precos", label: "Regra de Preços" },
       ]}
-      selected={p.tab || "produtos"}
+      selected={selected}
     />
   );
 }

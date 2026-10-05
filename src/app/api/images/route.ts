@@ -30,13 +30,20 @@ const config = {
     read: "menu.view",
     write: "menu.edit",
   },
+  bordas: {
+    table: "menu_border_groups",
+    column: "image_path",
+    bucket: "menu-images",
+    read: "menu.view",
+    write: "menu.edit",
+  },
 } as const;
 function input(request: Request) {
   const u = new URL(request.url);
   return {
     r: config[
       z
-        .enum(["loja", "produtos", "categorias"])
+        .enum(["loja", "produtos", "categorias", "bordas"])
         .parse(u.searchParams.get("resource"))
     ],
     id: z.uuid().parse(u.searchParams.get("id")),

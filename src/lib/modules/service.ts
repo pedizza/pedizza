@@ -1,5 +1,9 @@
 import "server-only";
 import { productSizesSchema } from "./product-sizes";
+import {
+  borderCategoryIdsSchema,
+  borderOptionsSchema,
+} from "./border-groups";
 import { Temporal } from "@js-temporal/polyfill";
 import { resources, resourceSchema } from "./registry";
 import { transaction, rows, one, type DB } from "@/lib/db";
@@ -34,7 +38,8 @@ export async function listResource(
     `to_char(updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as updated_at`,
     ...r.fields.map((f) => f.key),
   ];
-  if (["produtos", "categorias"].includes(key)) cols.push("image_path");
+  if (["produtos", "categorias", "bordas"].includes(key))
+    cols.push("image_path");
   if (key === "loja") cols.push("logo_path");
   if (key === "regras-precos") cols.push("name");
   return transaction(async (db) => {
@@ -61,7 +66,7 @@ export async function listResource(
     params.push(offset);
     const data = await rows<DataRow>(
       db,
-      `select ${cols.join(",")} from public.${r.table} where ${where} order by ${["produtos", "categorias"].includes(key) ? "sort_order,name,id" : "created_at desc,id"} limit 20 offset $${params.length}`,
+      `select ${cols.join(",")} from public.${r.table} where ${where} order by ${["produtos", "categorias", "bordas"].includes(key) ? "sort_order,name,id" : "created_at desc,id"} limit 20 offset $${params.length}`,
       params,
     );
     if (key === "produtos" && data.length) {
@@ -95,6 +100,40 @@ export async function listResource(
       for (const row of data)
         row.name = labels.find((label) => label.id === row.id)?.name;
     }
+    if (key === "bordas" && data.length) {
+      const groupIds = data.map((row) => row.id);
+      const options = await rows<{
+        id: string;
+        group_id: string;
+        name: string;
+        description: string;
+        price_cents: number;
+        active: boolean;
+        sort_order: number;
+      }>(
+        db,
+        "select id,group_id,name,description,base_price_cents price_cents,active,sort_order from public.menu_borders where tenant_id=$1 and group_id=any($2::uuid[]) and archived_at is null order by sort_order,name,id",
+        [ctx.tenantId, groupIds],
+      );
+      const links = await rows<{
+        group_id: string;
+        category_id: string;
+        category_name: string;
+      }>(
+        db,
+        "select x.group_id,x.category_id,c.name category_name from public.menu_border_group_categories x join public.menu_categories c on c.tenant_id=x.tenant_id and c.id=x.category_id where x.tenant_id=$1 and x.group_id=any($2::uuid[]) and c.archived_at is null order by c.sort_order,c.name,c.id",
+        [ctx.tenantId, groupIds],
+      );
+      for (const row of data) {
+        row.options = options.filter((option) => option.group_id === row.id);
+        row.category_ids = links
+          .filter((link) => link.group_id === row.id)
+          .map((link) => link.category_id);
+        row.category_names = links
+          .filter((link) => link.group_id === row.id)
+          .map((link) => link.category_name);
+      }
+    }
     const dates = r.fields.filter((f) => f.type === "datetime-local");
     if (dates.length) {
       const setting = await one<{ timezone: string }>(
@@ -117,14 +156,14 @@ export async function listResource(
         }
     }
     const categories =
-      key === "produtos"
+      ["produtos", "bordas"].includes(key)
         ? await rows<{ id: string; name: string }>(
             db,
             "select id,name from public.menu_categories where tenant_id=$1 and archived_at is null order by sort_order,name,id",
             [ctx.tenantId],
           )
         : undefined;
-    if (categories)
+    if (categories && key === "produtos")
       for (const row of data)
         row.category_name =
           categories.find((c) => c.id === row.category_id)?.name ||
@@ -208,9 +247,23 @@ export async function saveResource(
     "Crie a categoria na aba Categorias antes de configurar a regra.",
   );
   let sizes: ReturnType<typeof productSizesSchema.parse> | undefined;
+  let borderOptions: ReturnType<typeof borderOptionsSchema.parse> | undefined;
+  let borderCategoryIds:
+    | ReturnType<typeof borderCategoryIdsSchema.parse>
+    | undefined;
   if (key === "produtos" && raw && typeof raw === "object" && "sizes" in raw) {
     const { sizes: inputSizes, ...fields } = raw;
     sizes = productSizesSchema.parse(inputSizes);
+    raw = fields;
+  }
+  if (key === "bordas" && raw && typeof raw === "object") {
+    const {
+      options: inputOptions,
+      category_ids: inputCategoryIds,
+      ...fields
+    } = raw as Record<string, unknown>;
+    borderOptions = borderOptionsSchema.parse(inputOptions);
+    borderCategoryIds = borderCategoryIdsSchema.parse(inputCategoryIds);
     raw = fields;
   }
   const data: Record<string, unknown> = resourceSchema(r).parse(raw);
@@ -264,6 +317,17 @@ export async function saveResource(
       }
     }
     await validateRelations(db, ctx.tenantId, key, data, id);
+    if (key === "bordas" && borderCategoryIds) {
+      const categoryCount = await one<{ total: number }>(
+        db,
+        "select count(*)::int total from public.menu_categories where tenant_id=$1 and id=any($2::uuid[]) and archived_at is null",
+        [ctx.tenantId, borderCategoryIds],
+      );
+      invariant(
+        categoryCount?.total === borderCategoryIds.length,
+        "Selecione categorias disponíveis.",
+      );
+    }
     if (key === "loja" && id) {
       const old = await one<Record<string, unknown>>(
         db,
@@ -359,11 +423,61 @@ export async function saveResource(
         );
       }
     }
-    if (key === "bordas")
+    if (key === "bordas" && borderOptions && borderCategoryIds) {
+      const optionIds: string[] = [];
+      for (const option of borderOptions) {
+        if (option.id) {
+          const saved = await one<{ id: string }>(
+            db,
+            "update public.menu_borders set name=$4,description=$5,base_price_cents=$6,active=$7,sort_order=$8,archived_at=null where tenant_id=$1 and group_id=$2 and id=$3 returning id",
+            [
+              ctx.tenantId,
+              result.id,
+              option.id,
+              option.name,
+              option.description,
+              option.price_cents,
+              option.active,
+              option.sort_order,
+            ],
+          );
+          invariant(saved, "Sabor de borda não encontrado.", 404);
+          optionIds.push(saved.id);
+        } else {
+          const saved = await one<{ id: string }>(
+            db,
+            "insert into public.menu_borders(tenant_id,group_id,name,description,base_price_cents,active,sort_order) values($1,$2,$3,$4,$5,$6,$7) returning id",
+            [
+              ctx.tenantId,
+              result.id,
+              option.name,
+              option.description,
+              option.price_cents,
+              option.active,
+              option.sort_order,
+            ],
+          );
+          optionIds.push(saved!.id);
+        }
+      }
       await db.query(
-        "delete from public.menu_border_prices where tenant_id=$1 and border_id=$2",
+        "update public.menu_borders set active=false,archived_at=now() where tenant_id=$1 and group_id=$2 and not(id=any($3::uuid[])) and archived_at is null",
+        [ctx.tenantId, result.id, optionIds],
+      );
+      await db.query(
+        "delete from public.menu_border_prices p using public.menu_borders b where p.tenant_id=$1 and b.tenant_id=p.tenant_id and b.id=p.border_id and b.group_id=$2",
         [ctx.tenantId, result.id],
       );
+      await db.query(
+        "delete from public.menu_border_group_categories where tenant_id=$1 and group_id=$2",
+        [ctx.tenantId, result.id],
+      );
+      for (const categoryId of borderCategoryIds)
+        await db.query(
+          "insert into public.menu_border_group_categories(tenant_id,group_id,category_id) values($1,$2,$3)",
+          [ctx.tenantId, result.id, categoryId],
+        );
+    }
     await audit(
       db,
       ctx.tenantId,
@@ -423,6 +537,43 @@ export async function setProductAvailability(
   });
 }
 
+export async function setBorderGroupActive(
+  ctx: TenantContext,
+  id: string,
+  active: boolean,
+  expectedUpdatedAt?: string,
+) {
+  const r = resourceFor("bordas");
+  return transaction(async (db) => {
+    await authorize(db, ctx, r.write);
+    const params: unknown[] = [ctx.tenantId, id, active];
+    let where = "tenant_id=$1 and id=$2 and archived_at is null";
+    if (expectedUpdatedAt) {
+      params.push(expectedUpdatedAt);
+      where += ` and updated_at=$${params.length}::timestamptz`;
+    }
+    const result = await one<DataRow>(
+      db,
+      `update public.menu_border_groups set active=$3 where ${where} returning id,to_char(updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as updated_at`,
+      params,
+    );
+    invariant(
+      result,
+      "A borda mudou ou não está disponível. Atualize a página.",
+      409,
+    );
+    await audit(
+      db,
+      ctx.tenantId,
+      ctx.userId,
+      active ? "bordas.resumed" : "bordas.paused",
+      r.table,
+      id,
+    );
+    return { ...result, active };
+  });
+}
+
 export async function removeResource(
   ctx: TenantContext,
   key: string,
@@ -448,6 +599,11 @@ export async function removeResource(
           [ctx.tenantId, id],
         )),
         "Arquive ou mova os produtos desta categoria primeiro.",
+      );
+    if (key === "bordas")
+      await db.query(
+        "update public.menu_borders set active=false,archived_at=coalesce(archived_at,now()) where tenant_id=$1 and group_id=$2",
+        [ctx.tenantId, id],
       );
     const q = r.archive
       ? `update public.${r.table} set archived_at=now() where tenant_id=$1 and id=$2 returning id`

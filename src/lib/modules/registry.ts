@@ -397,7 +397,7 @@ export const resources: Record<string, Resource> = {
     archive: false,
   },
   bordas: {
-    table: "menu_borders",
+    table: "menu_border_groups",
     title: "Bordas",
     singular: "borda",
     description: "As opções de borda da sua pizzaria.",
@@ -412,17 +412,18 @@ export const resources: Record<string, Resource> = {
         required: false,
       },
       {
-        key: "base_price_cents",
-        label: "Preço",
-        type: "money",
-        required: true,
-      },
-      {
         key: "active",
         label: "Ativa",
         type: "checkbox",
         required: false,
         default: true,
+      },
+      {
+        key: "sort_order",
+        label: "Ordem",
+        type: "number",
+        required: false,
+        default: 0,
       },
     ],
     singleton: false,

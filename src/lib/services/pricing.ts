@@ -84,7 +84,7 @@ export async function priceItem(
   if (item.border_id) {
     const border = await one<{ name: string; price_cents: number }>(
       db,
-      `select b.name,coalesce(bp.price_cents,b.base_price_cents) price_cents from public.menu_borders b join public.menu_border_categories bc on bc.tenant_id=b.tenant_id and bc.border_id=b.id and bc.category_id=$3 left join public.menu_border_prices bp on bp.tenant_id=b.tenant_id and bp.border_id=b.id and bp.size_id=$4 where b.tenant_id=$1 and b.id=$2 and b.active and b.archived_at is null`,
+      `select g.name || ' — ' || b.name name,coalesce(bp.price_cents,b.base_price_cents) price_cents from public.menu_borders b join public.menu_border_groups g on g.tenant_id=b.tenant_id and g.id=b.group_id join public.menu_border_group_categories bc on bc.tenant_id=g.tenant_id and bc.group_id=g.id and bc.category_id=$3 left join public.menu_border_prices bp on bp.tenant_id=b.tenant_id and bp.border_id=b.id and bp.size_id=$4 where b.tenant_id=$1 and b.id=$2 and b.active and g.active and b.archived_at is null and g.archived_at is null`,
       [tenant, item.border_id, first.category_id, item.size_id],
     );
     invariant(border, "Borda indisponível para esta categoria.");
