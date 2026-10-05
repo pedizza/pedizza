@@ -402,13 +402,22 @@ export function ResourceManager({
               <span>Ações</span>
             </div>
           )}
+          {resourceKey === "categorias" && (
+            <div className="category-list-head" aria-hidden="true">
+              <span>Imagem</span>
+              <span>Categoria</span>
+              <span>Ordem</span>
+              <span>Ações</span>
+            </div>
+          )}
           {data.map((row) => (
             <article
-              className={`data-row ${resourceKey === "produtos" ? "product-row" : ""}`}
+              className={`data-row ${resourceKey === "produtos" ? "product-row" : resourceKey === "categorias" ? "category-row" : ""}`}
               key={row.id}
             >
-              {resourceKey === "produtos" && (
-                <div className="product-image">
+              {(resourceKey === "produtos" ||
+                resourceKey === "categorias") && (
+                <div className="catalog-image">
                   <ImageUpload
                     resource={resourceKey}
                     id={row.id}
@@ -420,15 +429,6 @@ export function ResourceManager({
                 </div>
               )}
               <div className="detail">
-                {resourceKey === "categorias" && (
-                  <ImageUpload
-                    resource={resourceKey}
-                    id={row.id}
-                    hasImage={!!row.image_path}
-                    canEdit={canEdit}
-                    onSaved={() => void load()}
-                  />
-                )}
                 <h3>
                   {resourceKey === "clientes" ? (
                     <Link href={`/app/clientes/${row.id}`}>{label(row)}</Link>
@@ -444,6 +444,9 @@ export function ResourceManager({
                     <p>{String(row.description || "")}</p>
                   </>
                 )}
+                {resourceKey === "categorias" && (
+                  <p>{String(row.description || "Sem descrição")}</p>
+                )}
                 {resourceKey === "regras-precos" && (
                   <span className={`badge ${row.allow_split ? "green" : ""}`}>
                     {row.allow_split
@@ -451,7 +454,8 @@ export function ResourceManager({
                       : "Somente um sabor"}
                   </span>
                 )}
-                {resourceKey !== "produtos" && (
+                {resourceKey !== "produtos" &&
+                  resourceKey !== "categorias" && (
                   <p>
                     {resource.fields
                       .filter(
@@ -476,6 +480,12 @@ export function ResourceManager({
                   </p>
                 )}
               </div>
+              {resourceKey === "categorias" && (
+                <div className="category-order">
+                  <span>Posição</span>
+                  <strong>{Number(row.sort_order) || 0}</strong>
+                </div>
+              )}
               {resourceKey === "produtos" && (
                 <table
                   className="product-prices"
