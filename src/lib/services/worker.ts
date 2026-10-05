@@ -6,10 +6,10 @@ import { privateFiles } from "@/lib/services/files";
 import { storeMedia } from "./media";
 import {
   sendText,
-  sendPoll,
+  sendList,
   sendMedia,
   mediaBase64,
-  whatsAppPollSchema,
+  whatsAppListSchema,
 } from "@/lib/integrations/evolution";
 import { extractWhatsAppMessageText } from "@/lib/domain/whatsapp";
 import { reconcileMpPayment } from "@/lib/integrations/mercado-pago";
@@ -82,7 +82,7 @@ async function dispatchMessage(job: Job) {
       media: z
         .object({ path: z.string(), mime: z.string(), name: z.string() })
         .optional(),
-      poll: whatsAppPollSchema.optional(),
+      list: whatsAppListSchema.optional(),
     })
     .parse(job.payload);
   const target = await transaction(async (db) => {
@@ -159,12 +159,12 @@ async function dispatchMessage(job: Job) {
         },
         input.text,
       );
-    } else if (input.poll) {
+    } else if (input.list) {
       try {
-        externalId = await sendPoll(
+        externalId = await sendList(
           target.instance_name,
           target.phone,
-          input.poll,
+          input.list,
         );
       } catch {
         externalId = await sendText(

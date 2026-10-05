@@ -16,7 +16,7 @@ import { enqueue, notify } from "./events";
 import { priceCart } from "./pricing";
 import { finalizeCart } from "./orders";
 import { orderLabels } from "@/lib/domain/orders";
-import type { WhatsAppPoll } from "@/lib/integrations/evolution";
+import type { WhatsAppList } from "@/lib/integrations/evolution";
 type BotContext = {
   cartId?: string;
   address?: Partial<Address>;
@@ -84,14 +84,34 @@ function mainMenu(store?: {
     `Olá! Seja bem-vindo (a) ${storeName} 🍕`;
   return {
     text: `${greeting}\n\nComo podemos ajudar?\n\n${prompts.main_menu}`,
-    poll: {
-      name: `Olá! Seja bem-vindo (a) ${storeName} 🍕\n\nComo podemos ajudar?`.slice(
-        0,
-        255,
-      ),
-      selectableCount: 1,
-      values: ["Fazer pedido", "Ver cardápio", "Acompanhar pedido"],
-    } satisfies WhatsAppPoll,
+    list: {
+      title: `Olá! Seja bem-vindo (a) ${storeName} 🍕`.slice(0, 60),
+      description: "Como podemos ajudar?",
+      buttonText: "Escolha aqui",
+      footerText: "Selecione uma opção para continuar.",
+      sections: [
+        {
+          title: "Opções",
+          rows: [
+            {
+              title: "Fazer pedido",
+              description: "Monte seu pedido",
+              rowId: "1",
+            },
+            {
+              title: "Ver cardápio",
+              description: "Confira nossos produtos",
+              rowId: "2",
+            },
+            {
+              title: "Acompanhar pedido",
+              description: "Veja o status do seu pedido",
+              rowId: "3",
+            },
+          ],
+        },
+      ],
+    } satisfies WhatsAppList,
   };
 }
 async function cartSummary(db: DB, tenant: string, cart: string) {
@@ -250,7 +270,7 @@ export async function processBotMessage(
         conversationId: c.id,
         sender: "bot",
         text: "Fluxo reiniciado.\n\n" + menu.text,
-        poll: menu.poll,
+        list: menu.list,
         epoch: c.bot_epoch + 1,
       });
       return;
@@ -266,7 +286,7 @@ export async function processBotMessage(
     let step = c.current_step;
     let reply = "";
     let handoff = false;
-    let replyPoll: WhatsAppPoll | undefined;
+    let replyList: WhatsAppList | undefined;
     const hours = await rows<BusinessHour>(
       db,
       "select day_of_week,start_time::text,end_time::text from public.store_business_hours where tenant_id=$1",
@@ -350,7 +370,7 @@ export async function processBotMessage(
     } else if (normalized === "menu") {
       step = "main_menu";
       reply = menu.text;
-      replyPoll = menu.poll;
+      replyList = menu.list;
     } else if (externalError) {
       reply = externalError + "\n" + (prompts[step] || "");
     } else if (text.includes("?") || interpretation?.intent === "question") {
@@ -457,7 +477,7 @@ export async function processBotMessage(
             }
           } else {
             reply = menu.text;
-            replyPoll = menu.poll;
+            replyList = menu.list;
           }
           break;
         case "awaiting_name":
@@ -964,7 +984,7 @@ export async function processBotMessage(
         default:
           step = "main_menu";
           reply = menu.text;
-          replyPoll = menu.poll;
+          replyList = menu.list;
       }
     if (c.context === context && step !== c.current_step)
       context.previousStep = c.current_step;
@@ -981,7 +1001,7 @@ export async function processBotMessage(
         conversationId: c.id,
         sender: handoff ? "system" : "bot",
         text: reply,
-        ...(replyPoll ? { poll: replyPoll } : {}),
+        ...(replyList ? { list: replyList } : {}),
         epoch: c.bot_epoch,
       });
   });
