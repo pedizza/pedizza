@@ -94,6 +94,44 @@ export async function sendText(name: string, phone: string, text: string) {
   return z.object({ key: z.object({ id: z.string() }) }).parse(response).key.id;
 }
 
+export const whatsAppListSchema = z.object({
+  title: z.string().min(1).max(60),
+  description: z.string().max(1024).default(""),
+  buttonText: z.string().min(1).max(20),
+  footerText: z.string().max(60).default(""),
+  sections: z
+    .array(
+      z.object({
+        title: z.string().min(1).max(24),
+        rows: z
+          .array(
+            z.object({
+              title: z.string().min(1).max(24),
+              description: z.string().max(72).default(""),
+              rowId: z.string().min(1).max(200),
+            }),
+          )
+          .min(1)
+          .max(10),
+      }),
+    )
+    .min(1)
+    .max(10),
+});
+export type WhatsAppList = z.infer<typeof whatsAppListSchema>;
+
+export async function sendList(
+  name: string,
+  phone: string,
+  list: WhatsAppList,
+) {
+  const response = await evolution(`/message/sendList/${instancePath(name)}`, {
+    number: phone,
+    ...whatsAppListSchema.parse(list),
+  });
+  return z.object({ key: z.object({ id: z.string() }) }).parse(response).key.id;
+}
+
 export async function mediaBase64(name: string, id: string) {
   return z
     .object({

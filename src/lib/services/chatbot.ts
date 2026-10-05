@@ -16,6 +16,7 @@ import { enqueue, notify } from "./events";
 import { priceCart } from "./pricing";
 import { finalizeCart } from "./orders";
 import { orderLabels } from "@/lib/domain/orders";
+import type { WhatsAppList } from "@/lib/integrations/evolution";
 type BotContext = {
   cartId?: string;
   address?: Partial<Address>;
@@ -41,7 +42,7 @@ type Conversation = {
 };
 const prompts: Record<string, string> = {
   main_menu:
-    "Olá! 🍕 Como podemos ajudar?\n1 — Fazer pedido\n2 — Ver cardápio\n3 — Acompanhar pedido\n4 — Falar com atendente",
+    "1 — Fazer pedido\n2 — Ver cardápio\n3 — Acompanhar pedido",
   awaiting_name: "Como você se chama?",
   awaiting_service: "Como deseja receber?\n1 — Entrega\n2 — Retirada",
   awaiting_cep: "Informe seu CEP (8 números).",
@@ -72,6 +73,47 @@ const prompts: Record<string, string> = {
     "Precisa de troco? Informe o valor (ex.: 100,00) ou 0 para não precisar.",
   awaiting_final_confirmation: "1 — CONFIRMAR PEDIDO\n2 — Voltar ao carrinho",
 };
+
+function mainMenu(store?: {
+  display_name: string;
+  welcome_message: string;
+}) {
+  const storeName = store?.display_name.trim() || "nossa pizzaria";
+  const greeting =
+    store?.welcome_message.trim() ||
+    `Olá! Seja bem-vindo (a) ${storeName} 🍕`;
+  return {
+    text: `${greeting}\n\nComo podemos ajudar?\n\n${prompts.main_menu}`,
+    list: {
+      title: `Olá! Seja bem-vindo (a) ${storeName} 🍕`.slice(0, 60),
+      description: "Como podemos ajudar?",
+      buttonText: "Escolha aqui",
+      footerText: "Selecione uma opção para continuar.",
+      sections: [
+        {
+          title: "Opções",
+          rows: [
+            {
+              title: "Fazer pedido",
+              description: "Monte seu pedido",
+              rowId: "1",
+            },
+            {
+              title: "Ver cardápio",
+              description: "Confira nossos produtos",
+              rowId: "2",
+            },
+            {
+              title: "Acompanhar pedido",
+              description: "Veja o status do seu pedido",
+              rowId: "3",
+            },
+          ],
+        },
+      ],
+    } satisfies WhatsAppList,
+  };
+}
 async function cartSummary(db: DB, tenant: string, cart: string) {
   const q = await priceCart(db, tenant, cart);
   return {
@@ -193,6 +235,20 @@ export async function processBotMessage(
       "select private.subscription_active($1) active",
       [tenant],
     );
+    const store = await one<{
+      display_name: string;
+      timezone: string;
+      status_mode: string;
+      welcome_message: string;
+      closed_message: string;
+      delivery_enabled: boolean;
+      pickup_enabled: boolean;
+    }>(
+      db,
+      "select display_name,timezone,status_mode,welcome_message,closed_message,delivery_enabled,pickup_enabled from public.store_settings where tenant_id=$1",
+      [tenant],
+    );
+    const menu = mainMenu(store || undefined);
     if (
       normalized === "reiniciar" &&
       !customer?.blocked &&
@@ -213,7 +269,8 @@ export async function processBotMessage(
       await enqueue(db, tenant, "message", "bot:" + messageId, {
         conversationId: c.id,
         sender: "bot",
-        text: "Fluxo reiniciado.\n" + prompts.main_menu,
+        text: "Fluxo reiniciado.\n\n" + menu.text,
+        list: menu.list,
         epoch: c.bot_epoch + 1,
       });
       return;
@@ -229,18 +286,7 @@ export async function processBotMessage(
     let step = c.current_step;
     let reply = "";
     let handoff = false;
-    const store = await one<{
-      timezone: string;
-      status_mode: string;
-      welcome_message: string;
-      closed_message: string;
-      delivery_enabled: boolean;
-      pickup_enabled: boolean;
-    }>(
-      db,
-      "select timezone,status_mode,welcome_message,closed_message,delivery_enabled,pickup_enabled from public.store_settings where tenant_id=$1",
-      [tenant],
-    );
+    let replyList: WhatsAppList | undefined;
     const hours = await rows<BusinessHour>(
       db,
       "select day_of_week,start_time::text,end_time::text from public.store_business_hours where tenant_id=$1",
@@ -323,7 +369,8 @@ export async function processBotMessage(
       reply = "Rascunho cancelado.\n" + prompts.main_menu;
     } else if (normalized === "menu") {
       step = "main_menu";
-      reply = prompts.main_menu;
+      reply = menu.text;
+      replyList = menu.list;
     } else if (externalError) {
       reply = externalError + "\n" + (prompts[step] || "");
     } else if (text.includes("?") || interpretation?.intent === "question") {
@@ -428,10 +475,10 @@ export async function processBotMessage(
               step = customer?.name ? "awaiting_service" : "awaiting_name";
               reply = prompts[step];
             }
-          } else
-            reply =
-              (store?.welcome_message ? store.welcome_message + "\n" : "") +
-              prompts.main_menu;
+          } else {
+            reply = menu.text;
+            replyList = menu.list;
+          }
           break;
         case "awaiting_name":
           invariant(
@@ -936,7 +983,8 @@ export async function processBotMessage(
           break;
         default:
           step = "main_menu";
-          reply = prompts.main_menu;
+          reply = menu.text;
+          replyList = menu.list;
       }
     if (c.context === context && step !== c.current_step)
       context.previousStep = c.current_step;
@@ -953,6 +1001,7 @@ export async function processBotMessage(
         conversationId: c.id,
         sender: handoff ? "system" : "bot",
         text: reply,
+        ...(replyList ? { list: replyList } : {}),
         epoch: c.bot_epoch,
       });
   });

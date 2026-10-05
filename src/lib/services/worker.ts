@@ -4,7 +4,14 @@ import webpush from "web-push";
 import { transaction, one, rows } from "@/lib/db";
 import { privateFiles } from "@/lib/services/files";
 import { storeMedia } from "./media";
-import { sendText, sendMedia, mediaBase64 } from "@/lib/integrations/evolution";
+import {
+  sendText,
+  sendList,
+  sendMedia,
+  mediaBase64,
+  whatsAppListSchema,
+} from "@/lib/integrations/evolution";
+import { extractWhatsAppMessageText } from "@/lib/domain/whatsapp";
 import { reconcileMpPayment } from "@/lib/integrations/mercado-pago";
 import { reconcileBravoTransaction } from "@/lib/integrations/bravopay";
 import { processBotMessage } from "./chatbot";
@@ -75,6 +82,7 @@ async function dispatchMessage(job: Job) {
       media: z
         .object({ path: z.string(), mime: z.string(), name: z.string() })
         .optional(),
+      list: whatsAppListSchema.optional(),
     })
     .parse(job.payload);
   const target = await transaction(async (db) => {
@@ -151,12 +159,22 @@ async function dispatchMessage(job: Job) {
         },
         input.text,
       );
+    } else if (input.list) {
+      try {
+        externalId = await sendList(
+          target.instance_name,
+          target.phone,
+          input.list,
+        );
+      } catch {
+        externalId = await sendText(
+          target.instance_name,
+          target.phone,
+          input.text,
+        );
+      }
     } else
-      externalId = await sendText(
-        target.instance_name,
-        target.phone,
-        input.text,
-      );
+      externalId = await sendText(target.instance_name, target.phone, input.text);
     await transaction(async (db) => {
       await db.query(
         "delete from public.conversation_messages where tenant_id=$1 and external_message_id=$2 and client_message_id is null",
@@ -300,15 +318,7 @@ async function processEvolution(job: Job) {
     .parse(payload.data);
   if (!data.key.remoteJid.endsWith("@s.whatsapp.net")) return;
   const phone = normalizePhone(data.key.remoteJid.split("@")[0]);
-  const extended = z
-    .object({ text: z.string().optional() })
-    .safeParse(data.message.extendedTextMessage);
-  const body =
-    typeof data.message.conversation === "string"
-      ? data.message.conversation
-      : extended.success
-        ? extended.data.text || ""
-        : "";
+  const body = extractWhatsAppMessageText(data.message);
   const record = await transaction(async (db) => {
     const customer = await one<{ id: string }>(
       db,

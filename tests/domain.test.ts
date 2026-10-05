@@ -7,6 +7,7 @@ import {
 } from "@/lib/domain/hours";
 import { canConfirmManually, canTransition } from "@/lib/domain/orders";
 import { normalizePhone, validDocument } from "@/lib/domain/normalization";
+import { extractWhatsAppMessageText } from "@/lib/domain/whatsapp";
 describe("domain invariants", () => {
   it("money stays in integer cents", () => {
     expect(splitPrice([5000, 7000], "proportional")).toBe(6000);
@@ -77,5 +78,21 @@ describe("domain invariants", () => {
     expect(normalizePhone("(11) 99999-9999")).toBe("5511999999999");
     expect(validDocument("11.222.333/0001-81", 14)).toBe(true);
     expect(validDocument("11111111111", 11)).toBe(false);
+  });
+  it("extracts WhatsApp list selections as chatbot commands", () => {
+    expect(
+      extractWhatsAppMessageText({
+        listResponseMessage: {
+          singleSelectReply: { selectedRowId: "2" },
+        },
+      }),
+    ).toBe("2");
+    expect(
+      extractWhatsAppMessageText({
+        interactiveResponseMessage: {
+          nativeFlowResponseMessage: { paramsJson: '{"id":"3"}' },
+        },
+      }),
+    ).toBe("3");
   });
 });
