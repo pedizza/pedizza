@@ -3,6 +3,7 @@ import Link from "next/link";
 import { requirePage } from "@/lib/auth/context";
 import { resources } from "@/lib/modules/registry";
 import { ResourceManager } from "./resource-manager";
+import { BusinessHoursManager } from "./business-hours-manager";
 import { PageHeader } from "./ui/states";
 export async function ModulePage({
   title,
@@ -74,15 +75,22 @@ export async function ModulePage({
           ))}
         </nav>
       )}
-      <ResourceManager
-        key={key}
-        resourceKey={key}
-        canEdit={ctx.permissions.includes(resource.write)}
-        canArchive={
-          key !== "regras-precos" &&
-          ctx.permissions.includes(archivePermission(key))
-        }
-      />
+      {key === "horarios" ? (
+        <BusinessHoursManager
+          key={key}
+          canEdit={ctx.permissions.includes(resource.write)}
+        />
+      ) : (
+        <ResourceManager
+          key={key}
+          resourceKey={key}
+          canEdit={ctx.permissions.includes(resource.write)}
+          canArchive={
+            key !== "regras-precos" &&
+            ctx.permissions.includes(archivePermission(key))
+          }
+        />
+      )}
     </>
   );
 }

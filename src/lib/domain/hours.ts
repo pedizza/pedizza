@@ -1,10 +1,27 @@
 import { Temporal } from "@js-temporal/polyfill";
+import { z } from "zod";
 import { invariant } from "@/lib/errors";
 export type BusinessHour = {
   day_of_week: number;
   start_time: string;
   end_time: string;
 };
+const timeSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
+export const weeklyHoursSchema = z
+  .array(
+    z
+      .object({
+        day_of_week: z.number().int().min(0).max(6),
+        start_time: timeSchema,
+        end_time: timeSchema,
+      })
+      .strict(),
+  )
+  .max(7)
+  .refine(
+    (hours) => new Set(hours.map((hour) => hour.day_of_week)).size === hours.length,
+    "Cadastre somente um horário por dia.",
+  );
 const minute = (t: string) =>
   Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
 export function validateHours(hours: BusinessHour[]) {

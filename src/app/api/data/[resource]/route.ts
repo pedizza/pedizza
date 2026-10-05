@@ -15,6 +15,7 @@ import {
   archivePermission,
   setProductAvailability,
   setBorderGroupActive,
+  replaceBusinessHours,
 } from "@/lib/modules/service";
 import { AppError } from "@/lib/errors";
 type Context = { params: Promise<{ resource: string }> };
@@ -64,6 +65,24 @@ export async function POST(request: Request, { params }: Context) {
       .strict()
       .parse(await readJson(request));
     return json(await saveResource(ctx, resource, data, id, updated_at));
+  } catch (e) {
+    return apiError(e);
+  }
+}
+export async function PUT(request: Request, { params }: Context) {
+  try {
+    verifyOrigin(request);
+    const { resource } = await params;
+    if (resource !== "horarios")
+      throw new AppError(404, "Ação não disponível.");
+    const r = resourceFor(resource);
+    const ctx = await requireTenant(r.write);
+    await rateLimit(ctx.userId + ":write", 90);
+    const input = z
+      .object({ hours: z.unknown() })
+      .strict()
+      .parse(await readJson(request));
+    return json(await replaceBusinessHours(ctx, input.hours));
   } catch (e) {
     return apiError(e);
   }

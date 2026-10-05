@@ -10,7 +10,11 @@ import { transaction, rows, one, type DB } from "@/lib/db";
 import { authorize, type TenantContext } from "@/lib/auth/context";
 import { AppError, invariant } from "@/lib/errors";
 import { normalizePhone, normalizeText } from "@/lib/domain/normalization";
-import { validateHours, type BusinessHour } from "@/lib/domain/hours";
+import {
+  validateHours,
+  weeklyHoursSchema,
+  type BusinessHour,
+} from "@/lib/domain/hours";
 import { audit } from "@/lib/audit";
 export type DataRow = Record<string, unknown> & {
   id: string;
@@ -571,6 +575,45 @@ export async function setBorderGroupActive(
       id,
     );
     return { ...result, active };
+  });
+}
+
+export async function replaceBusinessHours(
+  ctx: TenantContext,
+  raw: unknown,
+) {
+  const hours = weeklyHoursSchema.parse(raw);
+  validateHours(hours);
+  const r = resourceFor("horarios");
+  return transaction(async (db) => {
+    await authorize(db, ctx, r.write);
+    await db.query("select id from public.tenants where id=$1 for update", [
+      ctx.tenantId,
+    ]);
+    await db.query(
+      "delete from public.store_business_hours where tenant_id=$1",
+      [ctx.tenantId],
+    );
+    for (const hour of hours)
+      await db.query(
+        "insert into public.store_business_hours(tenant_id,day_of_week,start_time,end_time) values($1,$2,$3,$4)",
+        [
+          ctx.tenantId,
+          hour.day_of_week,
+          hour.start_time,
+          hour.end_time,
+        ],
+      );
+    await audit(
+      db,
+      ctx.tenantId,
+      ctx.userId,
+      "horarios.replaced",
+      r.table,
+      null,
+      { days: hours.length },
+    );
+    return { ok: true };
   });
 }
 
