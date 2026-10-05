@@ -28,5 +28,10 @@ export async function notify(
     `insert into public.notifications(tenant_id,user_id,type,title,body,action_url,required_permission,event_key,entity_id) select m.tenant_id,m.user_id,$3,$4,$5,$6,$7,$2,$8 from public.tenant_members m join public.profiles p on p.id=m.user_id where m.tenant_id=$1 and m.active and not p.blocked and (m.role='owner' or coalesce((select allowed from public.member_permissions where member_id=m.id and permission=$7),exists(select 1 from public.role_permissions where role=m.role and permission=$7))) on conflict(tenant_id,user_id,event_key) do nothing`,
     [tenant, eventKey, type, title, body, url, permission, entityId || null],
   );
-  await enqueue(db, tenant, "push", "push:" + eventKey, { eventKey });
+  if (
+    process.env.VAPID_PRIVATE_KEY &&
+    process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY &&
+    process.env.VAPID_SUBJECT
+  )
+    await enqueue(db, tenant, "push", "push:" + eventKey, { eventKey });
 }

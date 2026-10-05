@@ -27,10 +27,12 @@ type Job = {
   attempts: number;
 };
 async function claim(table: "outbox" | "webhook_events") {
+  const priority =
+    table === "outbox" ? "case when kind='message' then 0 else 1 end," : "";
   return transaction((db) =>
     one<Job>(
       db,
-      `with job as (select id from private.${table} where (status='pending' and available_at<=now() or status='processing' and locked_at<now()-interval '2 minutes') and attempts<5 order by created_at for update skip locked limit 1) update private.${table} q set status='processing',attempts=attempts+1,locked_at=now() from job where q.id=job.id returning q.id,q.tenant_id,${table === "outbox" ? "q.kind" : "q.provider as kind"},q.payload,q.attempts`,
+      `with job as (select id from private.${table} where (status='pending' and available_at<=now() or status='processing' and locked_at<now()-interval '2 minutes') and attempts<5 order by ${priority}created_at for update skip locked limit 1) update private.${table} q set status='processing',attempts=attempts+1,locked_at=now() from job where q.id=job.id returning q.id,q.tenant_id,${table === "outbox" ? "q.kind" : "q.provider as kind"},q.payload,q.attempts`,
     ),
   );
 }
@@ -159,7 +161,10 @@ async function dispatchMessage(job: Job) {
         },
         input.text,
       );
-    } else if (input.list) {
+    } else if (
+      input.list &&
+      process.env.EVOLUTION_INTERACTIVE_LISTS === "true"
+    ) {
       try {
         externalId = await sendList(
           target.instance_name,
@@ -226,6 +231,7 @@ export async function processWebhooks(limit = 8) {
     } catch {
       await fail("webhook_events", job);
     }
+    await processOutbox(2);
   }
   await processOutbox(limit);
 }

@@ -88,7 +88,8 @@ export async function getConnection(name: string) {
 export async function sendText(name: string, phone: string, text: string) {
   const response = await evolution(`/message/sendText/${instancePath(name)}`, {
     number: phone,
-    text: text.slice(0, 10000),
+    text: text.slice(0, 65_536),
+    delay: 650,
     linkPreview: false,
   });
   return z.object({ key: z.object({ id: z.string() }) }).parse(response).key.id;
