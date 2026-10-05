@@ -17,6 +17,7 @@ import { priceCart } from "./pricing";
 import { finalizeCart } from "./orders";
 import { orderLabels } from "@/lib/domain/orders";
 import type { WhatsAppList } from "@/lib/integrations/evolution";
+import { mainMenuOption } from "@/lib/domain/whatsapp";
 type BotContext = {
   cartId?: string;
   address?: Partial<Address>;
@@ -442,7 +443,7 @@ export async function processBotMessage(
     } else
       switch (step) {
         case "main_menu":
-          if (normalized === "3") {
+          if (mainMenuOption(normalized) === "3") {
             const last = await one<{
               order_number: number;
               order_status: string;
@@ -454,7 +455,7 @@ export async function processBotMessage(
             reply = last
               ? `Pedido #${last.order_number}: ${orderLabels[last.order_status]}`
               : "Você ainda não tem pedidos.";
-          } else if (normalized === "2") {
+          } else if (mainMenuOption(normalized) === "2") {
             const menu = await rows<{ name: string; description: string }>(
               db,
               "select name,description from public.menu_items where tenant_id=$1 and active and available and archived_at is null order by sort_order limit 8",
@@ -466,7 +467,7 @@ export async function processBotMessage(
                   (p) => p.name + (p.description ? " — " + p.description : ""),
                 )
                 .join("\n") + "\n\nDigite 1 para fazer um pedido.";
-          } else if (normalized === "1") {
+          } else if (mainMenuOption(normalized) === "1") {
             if (!isOpen) {
               reply =
                 store?.closed_message ||

@@ -7,7 +7,10 @@ import {
 } from "@/lib/domain/hours";
 import { canConfirmManually, canTransition } from "@/lib/domain/orders";
 import { normalizePhone, validDocument } from "@/lib/domain/normalization";
-import { extractWhatsAppMessageText } from "@/lib/domain/whatsapp";
+import {
+  extractWhatsAppMessageText,
+  mainMenuOption,
+} from "@/lib/domain/whatsapp";
 describe("domain invariants", () => {
   it("money stays in integer cents", () => {
     expect(splitPrice([5000, 7000], "proportional")).toBe(6000);
@@ -94,5 +97,14 @@ describe("domain invariants", () => {
         },
       }),
     ).toBe("3");
+  });
+  it("accepts numbers and natural text in the chatbot main menu", () => {
+    expect(mainMenuOption("1")).toBe("1");
+    expect(mainMenuOption("Fazer pedido")).toBe("1");
+    expect(mainMenuOption("Quero fazer um pedido, por favor")).toBe("1");
+    expect(mainMenuOption("Ver o cardápio")).toBe("2");
+    expect(mainMenuOption("Acompanhar meu pedido")).toBe("3");
+    expect(mainMenuOption("Status do pedido")).toBe("3");
+    expect(mainMenuOption("qualquer coisa")).toBeNull();
   });
 });

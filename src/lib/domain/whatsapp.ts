@@ -8,6 +8,29 @@ function string(value: unknown) {
   return typeof value === "string" ? value : "";
 }
 
+export function mainMenuOption(input: string): "1" | "2" | "3" | null {
+  const text = normalizeText(input).replace(/[!,?.]+/g, "");
+  if (
+    /^(1|pedido|pedir|fazer (um )?pedido|quero (fazer (um )?pedido|pedir))( por favor)?$/.test(
+      text,
+    )
+  )
+    return "1";
+  if (
+    /^(2|cardapio|ver (o )?cardapio|quero ver (o )?cardapio)( por favor)?$/.test(
+      text,
+    )
+  )
+    return "2";
+  if (
+    /^(3|acompanhar (meu |o )?pedido|meu pedido|status do pedido|rastrear (meu |o )?pedido)( por favor)?$/.test(
+      text,
+    )
+  )
+    return "3";
+  return null;
+}
+
 export function extractWhatsAppMessageText(
   message: Record<string, unknown>,
 ) {
@@ -43,3 +66,4 @@ export function extractWhatsAppMessageText(
 
   return "";
 }
+import { normalizeText } from "@/lib/domain/normalization";
