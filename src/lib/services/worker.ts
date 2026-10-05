@@ -76,7 +76,7 @@ async function dispatchMessage(job: Job) {
     .object({
       conversationId: z.uuid(),
       sender: z.enum(["bot", "employee", "system"]),
-      text: z.string().max(10000),
+      text: z.string().max(65_536),
       epoch: z.number().optional(),
       userId: z.uuid().optional(),
       media: z
@@ -174,7 +174,11 @@ async function dispatchMessage(job: Job) {
         );
       }
     } else
-      externalId = await sendText(target.instance_name, target.phone, input.text);
+      externalId = await sendText(
+        target.instance_name,
+        target.phone,
+        input.text,
+      );
     await transaction(async (db) => {
       await db.query(
         "delete from public.conversation_messages where tenant_id=$1 and external_message_id=$2 and client_message_id is null",

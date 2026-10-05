@@ -11,6 +11,10 @@ import {
   extractWhatsAppMessageText,
   mainMenuOption,
 } from "@/lib/domain/whatsapp";
+import {
+  formatCategoryCatalog,
+  WHATSAPP_TEXT_LIMIT,
+} from "@/lib/domain/catalog";
 describe("domain invariants", () => {
   it("money stays in integer cents", () => {
     expect(splitPrice([5000, 7000], "proportional")).toBe(6000);
@@ -106,5 +110,32 @@ describe("domain invariants", () => {
     expect(mainMenuOption("Acompanhar meu pedido")).toBe("3");
     expect(mainMenuOption("Status do pedido")).toBe("3");
     expect(mainMenuOption("qualquer coisa")).toBeNull();
+  });
+  it("formats every product in a category for WhatsApp", () => {
+    const message = formatCategoryCatalog(
+      "Pizzas Salgadas",
+      [
+        {
+          id: "1",
+          name: "Muçarela",
+          description: "Muçarela e tomate",
+          price_cents: 5200,
+          price_count: 1,
+        },
+        {
+          id: "2",
+          name: "Calabresa",
+          description: "Calabresa e cebola",
+          price_cents: 5200,
+          price_count: 1,
+        },
+      ],
+      "Responda com o número ou o nome do produto.",
+    );
+    expect(message).toContain("*1. Muçarela - R$ 52,00*\nMuçarela e tomate");
+    expect(message).toContain(
+      "\n\n*2. Calabresa - R$ 52,00*\nCalabresa e cebola",
+    );
+    expect(message.length).toBeLessThanOrEqual(WHATSAPP_TEXT_LIMIT);
   });
 });

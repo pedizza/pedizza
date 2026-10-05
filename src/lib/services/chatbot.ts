@@ -18,11 +18,16 @@ import { finalizeCart } from "./orders";
 import { orderLabels } from "@/lib/domain/orders";
 import type { WhatsAppList } from "@/lib/integrations/evolution";
 import { mainMenuOption } from "@/lib/domain/whatsapp";
+import {
+  formatCategoryCatalog,
+  type CatalogProduct,
+} from "@/lib/domain/catalog";
 type BotContext = {
   cartId?: string;
   address?: Partial<Address>;
   options?: { id: string; name: string }[];
   categoryId?: string;
+  categoryName?: string;
   productIds?: string[];
   sizeId?: string | null;
   borderId?: string | null;
@@ -42,8 +47,7 @@ type Conversation = {
   bot_epoch: number;
 };
 const prompts: Record<string, string> = {
-  main_menu:
-    "1 — Fazer pedido\n2 — Ver cardápio\n3 — Acompanhar pedido",
+  main_menu: "1 — Fazer pedido\n2 — Ver cardápio\n3 — Acompanhar pedido",
   awaiting_name: "Como você se chama?",
   awaiting_service: "Como deseja receber?\n1 — Entrega\n2 — Retirada",
   awaiting_cep: "Informe seu CEP (8 números).",
@@ -57,6 +61,7 @@ const prompts: Record<string, string> = {
   awaiting_address_confirmation:
     "Confirme o endereço e a taxa:\n1 — Confirmar\n2 — Corrigir CEP",
   awaiting_category: "Escolha uma categoria:",
+  browsing_category: "Escolha uma categoria para ver o cardápio:",
   awaiting_product: "Escolha um produto:",
   awaiting_size: "Escolha o tamanho:",
   awaiting_split: "Deseja dois sabores?\n1 — Sim\n2 — Apenas este sabor",
@@ -75,14 +80,10 @@ const prompts: Record<string, string> = {
   awaiting_final_confirmation: "1 — CONFIRMAR PEDIDO\n2 — Voltar ao carrinho",
 };
 
-function mainMenu(store?: {
-  display_name: string;
-  welcome_message: string;
-}) {
+function mainMenu(store?: { display_name: string; welcome_message: string }) {
   const storeName = store?.display_name.trim() || "nossa pizzaria";
   const greeting =
-    store?.welcome_message.trim() ||
-    `Olá! Seja bem-vindo (a) ${storeName} 🍕`;
+    store?.welcome_message.trim() || `Olá! Seja bem-vindo (a) ${storeName} 🍕`;
   return {
     text: `${greeting}\n\nComo podemos ajudar?\n\n${prompts.main_menu}`,
     list: {
@@ -250,11 +251,7 @@ export async function processBotMessage(
       [tenant],
     );
     const menu = mainMenu(store || undefined);
-    if (
-      normalized === "reiniciar" &&
-      !customer?.blocked &&
-      access?.active
-    ) {
+    if (normalized === "reiniciar" && !customer?.blocked && access?.active) {
       await db.query(
         "update public.carts set status='cancelled' where tenant_id=$1 and conversation_id=$2 and status='active'",
         [tenant, c.id],
@@ -334,7 +331,37 @@ export async function processBotMessage(
           : "")
       );
     }
-    const selected = () => context.options?.[Number(normalized) - 1];
+    async function categoryCatalog(footer: string) {
+      const products = await rows<CatalogProduct>(
+        db,
+        `select i.id,i.name,i.description,
+          coalesce(min(p.price_cents) filter(where p.active and s.active and s.archived_at is null),i.base_price_cents) price_cents,
+          count(distinct p.price_cents) filter(where p.active and s.active and s.archived_at is null)::int price_count
+        from public.menu_items i
+        left join public.menu_item_prices p on p.tenant_id=i.tenant_id and p.item_id=i.id
+        left join public.menu_sizes s on s.tenant_id=p.tenant_id and s.id=p.size_id
+        where i.tenant_id=$1 and i.category_id=$2 and i.active and i.available and i.archived_at is null
+        group by i.id,i.name,i.description,i.base_price_cents,i.sort_order
+        order by i.sort_order,i.name,i.id`,
+        [tenant, context.categoryId],
+      );
+      context.options = products.map(({ id, name }) => ({ id, name }));
+      return products.length
+        ? formatCategoryCatalog(
+            context.categoryName || "Cardápio",
+            products,
+            footer,
+          )
+        : "Nenhum produto disponível nesta categoria.";
+    }
+    const selected = () => {
+      const numeric = Number(normalized);
+      if (Number.isInteger(numeric) && numeric > 0)
+        return context.options?.[numeric - 1];
+      return context.options?.find(
+        (option) => normalizeText(option.name) === normalized,
+      );
+    };
     if (
       normalized === "atendente" ||
       normalized === "humano" ||
@@ -397,7 +424,7 @@ export async function processBotMessage(
       normalized === "mais" &&
       [
         "awaiting_category",
-        "awaiting_product",
+        "browsing_category",
         "awaiting_second_flavor",
         "awaiting_size",
         "awaiting_border",
@@ -408,7 +435,7 @@ export async function processBotMessage(
       const kind = (
         {
           awaiting_category: "category",
-          awaiting_product: "product",
+          browsing_category: "category",
           awaiting_second_flavor: "second",
           awaiting_size: "size",
           awaiting_border: "border",
@@ -430,7 +457,7 @@ export async function processBotMessage(
       const previousKind = (
         {
           awaiting_category: "category",
-          awaiting_product: "product",
+          browsing_category: "category",
           awaiting_second_flavor: "second",
           awaiting_size: "size",
           awaiting_border: "border",
@@ -456,17 +483,9 @@ export async function processBotMessage(
               ? `Pedido #${last.order_number}: ${orderLabels[last.order_status]}`
               : "Você ainda não tem pedidos.";
           } else if (mainMenuOption(normalized) === "2") {
-            const menu = await rows<{ name: string; description: string }>(
-              db,
-              "select name,description from public.menu_items where tenant_id=$1 and active and available and archived_at is null order by sort_order limit 8",
-              [tenant],
-            );
-            reply =
-              menu
-                .map(
-                  (p) => p.name + (p.description ? " — " + p.description : ""),
-                )
-                .join("\n") + "\n\nDigite 1 para fazer um pedido.";
+            step = "browsing_category";
+            context.page = 0;
+            reply = prompts[step] + "\n" + (await options("category"));
           } else if (mainMenuOption(normalized) === "1") {
             if (!isOpen) {
               reply =
@@ -691,17 +710,34 @@ export async function processBotMessage(
           break;
         case "awaiting_category":
           if (!selected()) {
-            reply = prompts[step];
+            reply = prompts[step] + "\n" + (await options("category"));
             break;
           }
           context.categoryId = selected()!.id;
+          context.categoryName = selected()!.name;
           context.page = 0;
           step = "awaiting_product";
-          reply = prompts[step] + "\n" + (await options("product"));
+          reply = await categoryCatalog(
+            "Responda com o número ou o nome do produto.",
+          );
+          break;
+        case "browsing_category":
+          if (!selected()) {
+            reply = prompts[step] + "\n" + (await options("category"));
+            break;
+          }
+          context.categoryId = selected()!.id;
+          context.categoryName = selected()!.name;
+          reply = await categoryCatalog(
+            "Digite 1 para fazer um pedido ou MENU para voltar.",
+          );
+          step = "main_menu";
           break;
         case "awaiting_product":
           if (!selected()) {
-            reply = prompts[step];
+            reply = await categoryCatalog(
+              "Responda com o número ou o nome do produto.",
+            );
             break;
           }
           context.productIds = [selected()!.id];
