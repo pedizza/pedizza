@@ -16,7 +16,7 @@ import { enqueue, notify } from "./events";
 import { priceCart } from "./pricing";
 import { finalizeCart } from "./orders";
 import { orderLabels } from "@/lib/domain/orders";
-import type { WhatsAppList } from "@/lib/integrations/evolution";
+import type { WhatsAppButtons } from "@/lib/integrations/evolution";
 type BotContext = {
   cartId?: string;
   address?: Partial<Address>;
@@ -84,34 +84,28 @@ function mainMenu(store?: {
     `Olá! Seja bem-vindo (a) ${storeName} 🍕`;
   return {
     text: `${greeting}\n\nComo podemos ajudar?\n\n${prompts.main_menu}`,
-    list: {
+    buttons: {
       title: `Olá! Seja bem-vindo (a) ${storeName} 🍕`.slice(0, 60),
       description: "Como podemos ajudar?",
-      buttonText: "Escolha aqui",
-      footerText: "Selecione uma opção para continuar.",
-      sections: [
+      footer: "Selecione uma opção para continuar.",
+      buttons: [
         {
-          title: "Opções",
-          rows: [
-            {
-              title: "Fazer pedido",
-              description: "Monte seu pedido",
-              rowId: "1",
-            },
-            {
-              title: "Ver cardápio",
-              description: "Confira nossos produtos",
-              rowId: "2",
-            },
-            {
-              title: "Acompanhar pedido",
-              description: "Veja o status do seu pedido",
-              rowId: "3",
-            },
-          ],
+          type: "reply",
+          displayText: "Fazer pedido",
+          id: "1",
+        },
+        {
+          type: "reply",
+          displayText: "Ver cardápio",
+          id: "2",
+        },
+        {
+          type: "reply",
+          displayText: "Acompanhar pedido",
+          id: "3",
         },
       ],
-    } satisfies WhatsAppList,
+    } satisfies WhatsAppButtons,
   };
 }
 async function cartSummary(db: DB, tenant: string, cart: string) {
@@ -270,7 +264,7 @@ export async function processBotMessage(
         conversationId: c.id,
         sender: "bot",
         text: "Fluxo reiniciado.\n\n" + menu.text,
-        list: menu.list,
+        buttons: menu.buttons,
         epoch: c.bot_epoch + 1,
       });
       return;
@@ -286,7 +280,7 @@ export async function processBotMessage(
     let step = c.current_step;
     let reply = "";
     let handoff = false;
-    let replyList: WhatsAppList | undefined;
+    let replyButtons: WhatsAppButtons | undefined;
     const hours = await rows<BusinessHour>(
       db,
       "select day_of_week,start_time::text,end_time::text from public.store_business_hours where tenant_id=$1",
@@ -370,7 +364,7 @@ export async function processBotMessage(
     } else if (normalized === "menu") {
       step = "main_menu";
       reply = menu.text;
-      replyList = menu.list;
+      replyButtons = menu.buttons;
     } else if (externalError) {
       reply = externalError + "\n" + (prompts[step] || "");
     } else if (text.includes("?") || interpretation?.intent === "question") {
@@ -477,7 +471,7 @@ export async function processBotMessage(
             }
           } else {
             reply = menu.text;
-            replyList = menu.list;
+            replyButtons = menu.buttons;
           }
           break;
         case "awaiting_name":
@@ -984,7 +978,7 @@ export async function processBotMessage(
         default:
           step = "main_menu";
           reply = menu.text;
-          replyList = menu.list;
+          replyButtons = menu.buttons;
       }
     if (c.context === context && step !== c.current_step)
       context.previousStep = c.current_step;
@@ -1001,7 +995,7 @@ export async function processBotMessage(
         conversationId: c.id,
         sender: handoff ? "system" : "bot",
         text: reply,
-        ...(replyList ? { list: replyList } : {}),
+        ...(replyButtons ? { buttons: replyButtons } : {}),
         epoch: c.bot_epoch,
       });
   });
