@@ -437,8 +437,8 @@ async function processEvolution(job: Job) {
   const record = await transaction(async (db) => {
     const customer = await one<{ id: string }>(
       db,
-      "insert into public.customers(tenant_id,phone,name,source) values($1,$2,$3,'whatsapp') on conflict(tenant_id,phone) do update set phone=excluded.phone returning id",
-      [tenant, phone, (data.pushName || "").slice(0, 120)],
+      "insert into public.customers(tenant_id,phone,name,source) values($1,$2,'','whatsapp') on conflict(tenant_id,phone) do update set phone=excluded.phone returning id",
+      [tenant, phone],
     );
     const conv = await one<{ id: string; bot_paused: boolean }>(
       db,
