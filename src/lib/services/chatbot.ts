@@ -1008,9 +1008,13 @@ export async function processBotMessage(
         },
       );
       const categoryName = normalizeText(category || "");
+      const sizeName = normalizeText(size || "");
       if (categoryName) {
         matches = matches.filter((product) => {
           const candidate = normalizeText(product.categoryName);
+          if (sizeName === "broto") return candidate.includes("broto");
+          if (sizeName === "grande" && categoryName.includes("broto"))
+            return candidate.includes("pizza") && !candidate.includes("broto");
           if (categoryName.includes("broto"))
             return candidate.includes("broto");
           if (categoryName.includes("pizza"))
@@ -1020,7 +1024,6 @@ export async function processBotMessage(
           );
         });
       }
-      const sizeName = normalizeText(size || "");
       if (sizeName)
         matches = matches.filter(
           (product) =>
@@ -1060,6 +1063,56 @@ export async function processBotMessage(
         return;
       }
       const products = await naturalProducts();
+      if (!draft.size) {
+        const requestedFamily = normalizeText(draft.category || "")
+          .replace(/\b(?:pizza|pizzas|broto|brotos)\b/g, "")
+          .trim();
+        const sizeSets = draft.flavors.map((flavor) => {
+          const variants = naturalMatches(products, flavor).filter(
+            (product) => {
+              const category = normalizeText(product.categoryName);
+              if (!category.includes("pizza") && !category.includes("broto"))
+                return false;
+              if (!requestedFamily) return true;
+              const family = category
+                .replace(/\b(?:pizza|pizzas|broto|brotos)\b/g, "")
+                .trim();
+              return family === requestedFamily;
+            },
+          );
+          return new Set(
+            variants.flatMap((product) =>
+              product.sizes.map((size) => size.name),
+            ),
+          );
+        });
+        const availableSizes = [...(sizeSets[0] || new Set<string>())].filter(
+          (size) => sizeSets.slice(1).every((candidate) => candidate.has(size)),
+        );
+        if (availableSizes.length > 1) {
+          context.pendingOrder = draft;
+          context.options = availableSizes
+            .sort((a, b) => {
+              const order = (value: string) =>
+                normalizeText(value) === "grande"
+                  ? 0
+                  : normalizeText(value) === "broto"
+                    ? 1
+                    : 2;
+              return order(a) - order(b) || a.localeCompare(b, "pt-BR");
+            })
+            .map((name) => ({ id: name, name }));
+          step = "ai_awaiting_size";
+          reply = joinBlocks(
+            "Qual tamanho você prefere para essa pizza? 🍕",
+            context.options
+              .map((item, index) => `${keycapNumber(index + 1)} ${item.name}`)
+              .join("\n"),
+          );
+          return;
+        }
+        if (availableSizes.length === 1) draft.size = availableSizes[0];
+      }
       const selectedProducts: NaturalProduct[] = [];
       for (const flavor of draft.flavors) {
         const matches = naturalMatches(
