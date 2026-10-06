@@ -599,9 +599,21 @@ export async function processBotMessage(
               reply =
                 store?.closed_message ||
                 "Estamos fechados neste momento. Você pode consultar o cardápio ou falar com a equipe.";
-            } else {
-              step = customer?.name ? "awaiting_service" : "awaiting_name";
+            } else if (!customer?.name) {
+              step = "awaiting_name";
               reply = prompts[step];
+            } else {
+              context.cartId = await ensureCart(
+                db,
+                tenant,
+                c.id,
+                c.customer_id,
+                "pickup",
+              );
+              context.address = undefined;
+              step = "awaiting_category";
+              context.page = 0;
+              reply = prompts[step] + "\n" + (await options("category"));
             }
           } else {
             reply = menu.text;
@@ -617,8 +629,17 @@ export async function processBotMessage(
             "update public.customers set name=$3 where tenant_id=$1 and id=$2",
             [tenant, c.customer_id, text.trim()],
           );
-          step = "awaiting_service";
-          reply = prompts[step];
+          context.cartId = await ensureCart(
+            db,
+            tenant,
+            c.id,
+            c.customer_id,
+            "pickup",
+          );
+          context.address = undefined;
+          step = "awaiting_category";
+          context.page = 0;
+          reply = prompts[step] + "\n" + (await options("category"));
           break;
         case "delivery_out_of_range":
           if (
@@ -672,9 +693,17 @@ export async function processBotMessage(
             deliveryChoice ? "delivery" : "pickup",
           );
           context.address = undefined;
-          step = "awaiting_category";
-          context.page = 0;
-          reply = prompts[step] + "\n" + (await options("category"));
+          const cartItems = await one<{ has_items: boolean }>(
+            db,
+            "select exists(select 1 from public.cart_items where tenant_id=$1 and cart_id=$2) has_items",
+            [tenant, context.cartId],
+          );
+          if (!cartItems?.has_items) {
+            step = "awaiting_category";
+            context.page = 0;
+            reply = prompts[step] + "\n" + (await options("category"));
+          } else if (deliveryChoice) await requestDeliveryAddress();
+          else await continueAfterAddress();
           break;
         case "awaiting_saved_address":
           if (
@@ -1052,19 +1081,8 @@ export async function processBotMessage(
           } else if (
             isChoice(normalized, "2", "finalizar", "finalizar pedido")
           ) {
-            const cart = await one<{ service_type: string }>(
-              db,
-              "select service_type from public.carts where tenant_id=$1 and id=$2 and status='active'",
-              [tenant, context.cartId],
-            );
-            invariant(cart, "Carrinho indisponível.");
-            if (cart.service_type === "delivery" && !context.address)
-              await requestDeliveryAddress();
-            else {
-              step = "awaiting_payment";
-              context.page = 0;
-              reply = prompts[step] + "\n" + (await options("payment"));
-            }
+            step = "awaiting_service";
+            reply = prompts[step];
           } else if (isChoice(normalized, "3", "aplicar cupom", "cupom")) {
             step = "awaiting_coupon";
             reply = prompts[step];
