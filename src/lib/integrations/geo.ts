@@ -4,8 +4,10 @@ import { createHash } from "node:crypto";
 import { externalJson } from "./http";
 import { requiredEnv } from "@/lib/env";
 import { transaction, one } from "@/lib/db";
-import { invariant } from "@/lib/errors";
+import { AppError, invariant } from "@/lib/errors";
 import { normalizeText } from "@/lib/domain/normalization";
+export const deliveryOutOfRangeMessage =
+  "Infelizmente, não atendemos esse local porque ele está fora da nossa área de entrega.";
 export const addressSchema = z.object({
   postal_code: z.string().regex(/^\d{8}$/),
   street: z.string().trim().min(2).max(200),
@@ -170,10 +172,8 @@ export async function quoteDelivery(tenant: string, address: Address) {
     },
     3600,
   );
-  invariant(
-    distance <= setup.max_distance_meters,
-    "Endereço fora da área de entrega.",
-  );
+  if (distance > setup.max_distance_meters)
+    throw new AppError(400, deliveryOutOfRangeMessage, "delivery_out_of_range");
   const fee = await transaction((db) =>
     one<{ fee_cents: number }>(
       db,
@@ -181,6 +181,7 @@ export async function quoteDelivery(tenant: string, address: Address) {
       [tenant, distance],
     ),
   );
-  invariant(fee, "Nenhuma taxa configurada para esta distância.");
+  if (!fee)
+    throw new AppError(400, deliveryOutOfRangeMessage, "delivery_out_of_range");
   return { fee_cents: fee.fee_cents, distance_meters: distance };
 }

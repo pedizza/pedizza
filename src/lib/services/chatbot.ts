@@ -9,6 +9,7 @@ import {
   lookupCep,
   quoteDelivery,
   addressSchema,
+  deliveryOutOfRangeMessage,
   type Address,
 } from "@/lib/integrations/geo";
 import { interpretMessage } from "@/lib/integrations/openai";
@@ -60,6 +61,8 @@ const prompts: Record<string, string> = {
     "Escolha um endereço salvo ou digite 0 para usar outro:",
   awaiting_address_confirmation:
     "Confirme o endereço e a taxa:\n1 — Confirmar\n2 — Corrigir CEP",
+  delivery_out_of_range:
+    "Como deseja continuar?\n1 — Retirar na pizzaria\n2 — Voltar ao menu",
   awaiting_category: "Escolha uma categoria:",
   browsing_category: "*Escolha uma categoria para ver o cardápio:*",
   awaiting_product: "Escolha um produto:",
@@ -150,7 +153,8 @@ export async function processBotMessage(
   let savedAddress: Address | undefined;
   let cep: Awaited<ReturnType<typeof lookupCep>> | undefined,
     delivery: Awaited<ReturnType<typeof quoteDelivery>> | undefined,
-    externalError: string | undefined;
+    externalError: string | undefined,
+    externalErrorCode: string | undefined;
   try {
     if (
       initial.current_step === "awaiting_saved_address" &&
@@ -198,6 +202,7 @@ export async function processBotMessage(
         addressSchema.parse(initial.context.address),
       );
   } catch (e) {
+    externalErrorCode = e instanceof AppError ? e.code : undefined;
     externalError =
       e instanceof AppError
         ? e.message
@@ -400,7 +405,17 @@ export async function processBotMessage(
       reply = menu.text;
       replyList = menu.list;
     } else if (externalError) {
-      reply = externalError + "\n" + (prompts[step] || "");
+      if (externalErrorCode === "delivery_out_of_range") {
+        context.address = undefined;
+        context.quoteHash = undefined;
+        if (store?.pickup_enabled) {
+          step = "delivery_out_of_range";
+          reply = deliveryOutOfRangeMessage + "\n\n" + prompts[step];
+        } else {
+          step = "main_menu";
+          reply = deliveryOutOfRangeMessage + "\n\n" + menu.text;
+        }
+      } else reply = externalError + "\n" + (prompts[step] || "");
     } else if (text.includes("?") || interpretation?.intent === "question") {
       const query = (interpretation?.query || text.replace(/[?!]/g, "")).slice(
         0,
@@ -510,6 +525,25 @@ export async function processBotMessage(
           );
           step = "awaiting_service";
           reply = prompts[step];
+          break;
+        case "delivery_out_of_range":
+          if (normalized === "1") {
+            const cart = await ensureCart(
+              db,
+              tenant,
+              c.id,
+              c.customer_id,
+              "pickup",
+            );
+            context.cartId = cart;
+            step = "awaiting_category";
+            context.page = 0;
+            reply = prompts[step] + "\n" + (await options("category"));
+          } else if (normalized === "2") {
+            step = "main_menu";
+            reply = menu.text;
+            replyList = menu.list;
+          } else reply = prompts[step];
           break;
         case "awaiting_service":
           if (!["1", "2"].includes(normalized)) {
