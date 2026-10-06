@@ -14,7 +14,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const baseUrl = process.env.PEDIZZA_APP_URL || "https://www.pedizza.com.br";
 const appOrigin = new URL(baseUrl).origin;
-const ordersUrl = new URL("/gestor-pedidos", appOrigin).toString();
+const startUrl = new URL("/app/pedidos", appOrigin).toString();
 const iconPath = path.join(__dirname, "assets", "icon.png");
 
 let mainWindow = null;
@@ -53,19 +53,10 @@ function openExternalSafely(value) {
   } catch {}
 }
 
-function keepInsideOrders(event, value) {
+function keepInsideApp(event, value) {
   if (!isAllowedOrigin(value)) {
     event.preventDefault();
     openExternalSafely(value);
-    return;
-  }
-  const url = new URL(value);
-  if (
-    url.pathname === "/app" ||
-    (url.pathname.startsWith("/app/") && !isPrintPage(value))
-  ) {
-    event.preventDefault();
-    void mainWindow?.loadURL(ordersUrl);
   }
 }
 
@@ -109,14 +100,8 @@ function createWindow() {
     openExternalSafely(url);
     return { action: "deny" };
   });
-  mainWindow.webContents.on("will-navigate", keepInsideOrders);
-  mainWindow.webContents.on("will-redirect", keepInsideOrders);
-  mainWindow.webContents.on("did-finish-load", () => {
-    const current = mainWindow?.webContents.getURL();
-    if (!current || !isAllowedOrigin(current)) return;
-    const url = new URL(current);
-    if (url.pathname === "/app") void mainWindow?.loadURL(ordersUrl);
-  });
+  mainWindow.webContents.on("will-navigate", keepInsideApp);
+  mainWindow.webContents.on("will-redirect", keepInsideApp);
   mainWindow.once("ready-to-show", () => mainWindow?.show());
   mainWindow.on("close", (event) => {
     if (quitting) return;
@@ -127,7 +112,7 @@ function createWindow() {
     mainWindow = null;
   });
 
-  void mainWindow.loadURL(ordersUrl);
+  void mainWindow.loadURL(startUrl);
 }
 
 function createTray() {
