@@ -10,9 +10,11 @@ import { NotificationBell } from "./notification-bell";
 export function DesktopOrdersShell({
   ctx,
   children,
+  action,
 }: {
   ctx: TenantContext;
   children: React.ReactNode;
+  action?: React.ReactNode;
 }) {
   const router = useRouter();
 
@@ -71,13 +73,16 @@ export function DesktopOrdersShell({
       </header>
       <main className="desktop-orders-content">
         <div className="desktop-orders-title">
-          <div className="desktop-orders-title-icon">
-            <ClipboardList size={22} />
+          <div className="desktop-orders-title-copy">
+            <div className="desktop-orders-title-icon">
+              <ClipboardList size={22} />
+            </div>
+            <div>
+              <h1>Pedidos</h1>
+              <p>Acompanhe e atualize toda a operação.</p>
+            </div>
           </div>
-          <div>
-            <h1>Pedidos</h1>
-            <p>Acompanhe e atualize toda a operação.</p>
-          </div>
+          {action}
         </div>
         {children}
       </main>

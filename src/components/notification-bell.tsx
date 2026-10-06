@@ -1,19 +1,20 @@
 "use client";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
 import { Bell } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRealtime } from "./realtime";
 export function NotificationBell({ tenantId }: { tenantId: string }) {
-  const pathname = usePathname();
   const [unread, setUnread] = useState(0);
   const knownNotifications = useRef<Set<string> | null>(null),
     audio = useRef<HTMLAudioElement | null>(null),
-    loading = useRef(false);
+    loading = useRef(false),
+    preferences = useRef({ sound: false, orders: true }),
+    lastRealtimeOrderAt = useRef(0);
   useEffect(() => {
     const player = new Audio("/sounds/toque-pedido-novo.mp3");
     player.preload = "auto";
     audio.current = player;
+    player.load();
     function unlock() {
       player.muted = true;
       void player
@@ -38,6 +39,16 @@ export function NotificationBell({ tenantId }: { tenantId: string }) {
       audio.current = null;
     };
   }, []);
+  function playOrderSound() {
+    if (
+      !preferences.current.sound ||
+      !preferences.current.orders ||
+      !audio.current
+    )
+      return;
+    audio.current.currentTime = 0;
+    void audio.current.play().catch(() => {});
+  }
   const load = useCallback(() => {
     if (loading.current) return;
     loading.current = true;
@@ -46,6 +57,10 @@ export function NotificationBell({ tenantId }: { tenantId: string }) {
         if (!r.ok) return;
         const b = await r.json();
         setUnread(b.unread);
+        preferences.current = {
+          sound: !!b.preferences?.sound_enabled,
+          orders: b.preferences?.orders_enabled !== false,
+        };
         const notices = (b.data || []) as { id: string; type: string }[];
         const previous = knownNotifications.current;
         const hasNewOrder =
@@ -56,24 +71,48 @@ export function NotificationBell({ tenantId }: { tenantId: string }) {
         knownNotifications.current = new Set(
           notices.map((notice) => notice.id),
         );
-        if (
-          hasNewOrder &&
-          !pathname.startsWith("/app/pedidos") &&
-          b.preferences?.sound_enabled &&
-          b.preferences?.orders_enabled &&
-          audio.current
-        ) {
-          audio.current.currentTime = 0;
-          void audio.current.play().catch(() => {});
-        }
+        if (hasNewOrder && Date.now() - lastRealtimeOrderAt.current > 5000)
+          playOrderSound();
       })
       .catch(() => {})
       .finally(() => {
         loading.current = false;
       });
-  }, [pathname]);
+  }, []);
   useEffect(load, [load]);
-  useRealtime(tenantId, "notifications", load, undefined, 1500);
+  useRealtime(tenantId, "notifications", load, undefined, 15000);
+  useEffect(() => {
+    const source = new EventSource("/api/orders/events");
+    source.addEventListener("open", () => {
+      window.dispatchEvent(
+        new CustomEvent("pedizza:realtime-state", {
+          detail: { connected: true },
+        }),
+      );
+    });
+    source.addEventListener("error", () => {
+      window.dispatchEvent(
+        new CustomEvent("pedizza:realtime-state", {
+          detail: { connected: false },
+        }),
+      );
+    });
+    source.addEventListener("order", (message) => {
+      try {
+        const detail = JSON.parse((message as MessageEvent<string>).data);
+        window.dispatchEvent(
+          new CustomEvent("pedizza:order-change", { detail }),
+        );
+        if (detail.kind === "insert") {
+          lastRealtimeOrderAt.current = Date.now();
+          requestAnimationFrame(() => playOrderSound());
+        }
+        void load();
+      } catch {}
+    });
+    return () => source.close();
+  }, [tenantId, load]);
+
   return (
     <Link
       href="/app/notificacoes"

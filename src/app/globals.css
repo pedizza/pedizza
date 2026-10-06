@@ -959,6 +959,13 @@ small {
 .desktop-orders-title {
   gap: 13px;
   margin-bottom: 24px;
+  justify-content: space-between;
+}
+
+.desktop-orders-title-copy {
+  display: flex;
+  align-items: center;
+  gap: 13px;
 }
 
 .desktop-orders-title-icon {
@@ -1016,6 +1023,10 @@ small {
   }
   .desktop-orders-content {
     padding: 20px 14px 40px;
+  }
+  .desktop-orders-title {
+    align-items: stretch;
+    flex-direction: column;
   }
 }
 .order-card {

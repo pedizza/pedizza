@@ -39,7 +39,6 @@ export function OrdersBoard({
   initialOrders = [],
   initialTotal = 0,
   initialObservedAt,
-  soundEnabled = false,
 }: {
   tenantId: string;
   permissions: Permission[];
@@ -48,7 +47,6 @@ export function OrdersBoard({
   initialOrders?: Order[];
   initialTotal?: number;
   initialObservedAt?: string;
-  soundEnabled?: boolean;
 }) {
   const [orders, setOrders] = useState<Order[]>(initialOrders),
     [filter, setFilter] = useState(""),
@@ -56,6 +54,7 @@ export function OrdersBoard({
     [total, setTotal] = useState(initialTotal),
     [search, setSearch] = useState(""),
     [query, setQuery] = useState(""),
+    [realtimeConnected, setRealtimeConnected] = useState(false),
     [error, setError] = useState(""),
     [detail, setDetail] = useState<Detail | null>(null),
     [action, setAction] = useState<{ order: Order; status: string } | null>(
@@ -63,46 +62,12 @@ export function OrdersBoard({
     ),
     [busy, setBusy] = useState(false);
   const loading = useRef(false),
-    skipInitialLoad = useRef(!!initialObservedAt),
-    audio = useRef<HTMLAudioElement | null>(null),
-    latestCreatedAt = useRef(
-      Date.parse(initialObservedAt || "1970-01-01T00:00:00.000Z"),
-    );
+    skipInitialLoad = useRef(!!initialObservedAt);
 
   useEffect(() => {
     const timer = setTimeout(() => setQuery(search), 250);
     return () => clearTimeout(timer);
   }, [search]);
-
-  useEffect(() => {
-    if (!soundEnabled) return;
-    const player = new Audio("/sounds/toque-pedido-novo.mp3");
-    player.preload = "auto";
-    audio.current = player;
-    function unlock() {
-      player.muted = true;
-      void player
-        .play()
-        .then(() => {
-          player.pause();
-          player.currentTime = 0;
-          player.muted = false;
-          window.removeEventListener("pointerdown", unlock);
-          window.removeEventListener("keydown", unlock);
-        })
-        .catch(() => {
-          player.muted = false;
-        });
-    }
-    window.addEventListener("pointerdown", unlock);
-    window.addEventListener("keydown", unlock);
-    return () => {
-      window.removeEventListener("pointerdown", unlock);
-      window.removeEventListener("keydown", unlock);
-      player.pause();
-      audio.current = null;
-    };
-  }, [soundEnabled]);
 
   const load = useCallback(async () => {
     if (loading.current) return;
@@ -115,26 +80,9 @@ export function OrdersBoard({
       const body = await response.json();
       if (!response.ok) throw new Error(body.error);
       const next = body.data as Order[];
-      const newOrder = next.some(
-        (order) =>
-          order.order_status === "new" &&
-          new Date(order.created_at).getTime() > latestCreatedAt.current,
-      );
-      for (const order of next)
-        latestCreatedAt.current = Math.max(
-          latestCreatedAt.current,
-          new Date(order.created_at).getTime(),
-        );
       setOrders(next);
       setTotal(body.total);
       setError("");
-      if (newOrder && audio.current) {
-        requestAnimationFrame(() => {
-          if (!audio.current) return;
-          audio.current.currentTime = 0;
-          void audio.current.play().catch(() => {});
-        });
-      }
     } catch (reason) {
       setError(
         reason instanceof Error ? reason.message : "Falha ao carregar pedidos.",
@@ -150,7 +98,51 @@ export function OrdersBoard({
     }
     void load();
   }, [load]);
-  useRealtime(tenantId, "orders", () => void load(), undefined, 1000);
+  useRealtime(tenantId, "orders", () => void load(), undefined, 15000);
+  useEffect(() => {
+    const onState = (event: Event) =>
+      setRealtimeConnected(
+        !!(event as CustomEvent<{ connected: boolean }>).detail?.connected,
+      );
+    const onOrder = (event: Event) => {
+      const detail = (
+        event as CustomEvent<{
+          kind: "insert" | "update" | "delete";
+          orderId: string;
+          order: Order | null;
+        }>
+      ).detail;
+      if (!detail) return;
+      if (page !== 1 || filter || query || !detail.order) {
+        void load();
+        return;
+      }
+      setOrders((current) => {
+        const exists = current.some((order) => order.id === detail.orderId);
+        if (detail.kind === "delete")
+          return current.filter((order) => order.id !== detail.orderId);
+        if (detail.kind === "insert") {
+          if (!exists) setTotal((value) => value + 1);
+          return [
+            detail.order!,
+            ...current.filter((order) => order.id !== detail.orderId),
+          ].slice(0, 20);
+        }
+        return exists
+          ? current.map((order) =>
+              order.id === detail.orderId ? detail.order! : order,
+            )
+          : current;
+      });
+      setError("");
+    };
+    window.addEventListener("pedizza:realtime-state", onState);
+    window.addEventListener("pedizza:order-change", onOrder);
+    return () => {
+      window.removeEventListener("pedizza:realtime-state", onState);
+      window.removeEventListener("pedizza:order-change", onOrder);
+    };
+  }, [filter, load, page, query]);
   async function inspect(id: string) {
     const r = await fetch("/api/orders?id=" + id);
     const b = await r.json();
@@ -240,6 +232,9 @@ export function OrdersBoard({
             </option>
           ))}
         </select>
+        <span className={`badge ${realtimeConnected ? "green" : "amber"}`}>
+          {realtimeConnected ? "Tempo real conectado" : "Reconectando…"}
+        </span>
       </div>
       {error && (
         <p className="feedback" role="alert">

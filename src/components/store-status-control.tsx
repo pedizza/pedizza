@@ -27,8 +27,10 @@ export function StoreStatusControl({
 
   async function change(next: Exclude<Mode, "automatic">) {
     if (!canManage || busy || next === mode) return;
+    const previous = mode;
     setBusy(next);
     setError("");
+    setMode(next);
     try {
       const response = await fetch("/api/store-status", {
         method: "POST",
@@ -40,6 +42,7 @@ export function StoreStatusControl({
         throw new Error(body.error || "Falha ao atualizar a loja.");
       setMode(body.status_mode as Mode);
     } catch (reason) {
+      setMode(previous);
       setError(
         reason instanceof Error ? reason.message : "Falha ao atualizar a loja.",
       );

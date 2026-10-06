@@ -40,7 +40,7 @@ export async function POST(request: Request) {
         ctx.tenantId,
       );
       return store;
-    }, ctx.userId);
+    });
     return json(result);
   } catch (error) {
     return apiError(error);

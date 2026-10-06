@@ -11,19 +11,14 @@ export default async function Page() {
       observed_at: string;
       status_mode: string;
       trigger_mode: string;
-      sound_enabled: boolean;
-      orders_enabled: boolean;
     }>(
       db,
       `select to_char(clock_timestamp() at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') observed_at,s.status_mode,
-              coalesce(p.trigger_mode,'manual') trigger_mode,
-              coalesce(n.sound_enabled,false) sound_enabled,
-              coalesce(n.orders_enabled,true) orders_enabled
+              coalesce(p.trigger_mode,'manual') trigger_mode
        from public.store_settings s
        left join public.print_settings p on p.tenant_id=s.tenant_id
-       left join public.notification_preferences n on n.tenant_id=s.tenant_id and n.user_id=$2
        where s.tenant_id=$1`,
-      [ctx.tenantId, ctx.userId],
+      [ctx.tenantId],
     );
     return {
       ...(await listOrders(db, ctx.tenantId)),
@@ -49,10 +44,6 @@ export default async function Page() {
         initialOrders={initial.data}
         initialTotal={initial.total}
         initialObservedAt={initial.observed?.observed_at}
-        soundEnabled={
-          !!initial.observed?.sound_enabled &&
-          !!initial.observed?.orders_enabled
-        }
       />
     </>
   );
