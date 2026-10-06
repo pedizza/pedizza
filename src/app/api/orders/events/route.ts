@@ -9,12 +9,17 @@ export const maxDuration = 60;
 
 export async function GET() {
   const ctx = await requireTenant("orders.view");
-  const observed = await transaction((db) =>
-    one<{ observed_at: string }>(
+  const initial = await transaction(async (db) => ({
+    observed: await one<{ observed_at: string }>(
       db,
       `select to_char(clock_timestamp() at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') observed_at`,
     ),
-  );
+    pending: await rows<{ id: string }>(
+      db,
+      "select id from public.orders where tenant_id=$1 and order_status='new' order by created_at limit 100",
+      [ctx.tenantId],
+    ),
+  }));
   const encoder = new TextEncoder();
   let dispose = () => {};
   let heartbeat: ReturnType<typeof setInterval> | undefined;
@@ -22,7 +27,7 @@ export async function GET() {
   let lifetime: ReturnType<typeof setTimeout> | undefined;
   let closed = false;
   let polling = false;
-  let cursor = observed?.observed_at || new Date().toISOString();
+  let cursor = initial.observed?.observed_at || new Date().toISOString();
   const sentVersions = new Map<string, string>();
 
   const stream = new ReadableStream<Uint8Array>({
@@ -40,6 +45,9 @@ export async function GET() {
         send(`event: order\ndata: ${JSON.stringify(event)}\n\n`);
       };
       send("retry: 1000\nevent: ready\ndata: {}\n\n");
+      send(
+        `event: pending\ndata: ${JSON.stringify({ ids: initial.pending.map((order) => order.id) })}\n\n`,
+      );
       dispose = subscribeOrderEvents((event: OrderEvent) => {
         if (event.tenantId === ctx.tenantId) sendOrder(event);
       });

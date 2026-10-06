@@ -5,24 +5,30 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRealtime } from "./realtime";
 export function NotificationBell({ tenantId }: { tenantId: string }) {
   const [unread, setUnread] = useState(0);
-  const knownNotifications = useRef<Set<string> | null>(null),
-    audio = useRef<HTMLAudioElement | null>(null),
+  const audio = useRef<HTMLAudioElement | null>(null),
     loading = useRef(false),
     preferences = useRef({ sound: false, orders: true }),
-    lastRealtimeOrderAt = useRef(0);
+    pendingOrders = useRef(new Set<string>());
   useEffect(() => {
     const player = new Audio("/sounds/toque-pedido-novo.mp3");
     player.preload = "auto";
+    player.loop = true;
     audio.current = player;
     player.load();
     function unlock() {
-      player.muted = true;
+      const shouldRing =
+        pendingOrders.current.size > 0 &&
+        preferences.current.sound &&
+        preferences.current.orders;
+      player.muted = !shouldRing;
       void player
         .play()
         .then(() => {
-          player.pause();
-          player.currentTime = 0;
           player.muted = false;
+          if (!shouldRing) {
+            player.pause();
+            player.currentTime = 0;
+          }
           window.removeEventListener("pointerdown", unlock);
           window.removeEventListener("keydown", unlock);
         })
@@ -39,15 +45,20 @@ export function NotificationBell({ tenantId }: { tenantId: string }) {
       audio.current = null;
     };
   }, []);
-  function playOrderSound() {
-    if (
-      !preferences.current.sound ||
-      !preferences.current.orders ||
-      !audio.current
-    )
-      return;
-    audio.current.currentTime = 0;
-    void audio.current.play().catch(() => {});
+  function syncOrderAlarm() {
+    const player = audio.current;
+    if (!player) return;
+    const shouldRing =
+      pendingOrders.current.size > 0 &&
+      preferences.current.sound &&
+      preferences.current.orders;
+    if (shouldRing) {
+      player.loop = true;
+      if (player.paused) void player.play().catch(() => {});
+    } else {
+      player.pause();
+      player.currentTime = 0;
+    }
   }
   const load = useCallback(() => {
     if (loading.current) return;
@@ -61,18 +72,7 @@ export function NotificationBell({ tenantId }: { tenantId: string }) {
           sound: !!b.preferences?.sound_enabled,
           orders: b.preferences?.orders_enabled !== false,
         };
-        const notices = (b.data || []) as { id: string; type: string }[];
-        const previous = knownNotifications.current;
-        const hasNewOrder =
-          previous !== null &&
-          notices.some(
-            (notice) => notice.type === "order.new" && !previous.has(notice.id),
-          );
-        knownNotifications.current = new Set(
-          notices.map((notice) => notice.id),
-        );
-        if (hasNewOrder && Date.now() - lastRealtimeOrderAt.current > 5000)
-          playOrderSound();
+        syncOrderAlarm();
       })
       .catch(() => {})
       .finally(() => {
@@ -100,14 +100,23 @@ export function NotificationBell({ tenantId }: { tenantId: string }) {
     source.addEventListener("order", (message) => {
       try {
         const detail = JSON.parse((message as MessageEvent<string>).data);
+        if (detail.order?.order_status === "new")
+          pendingOrders.current.add(detail.orderId);
+        else pendingOrders.current.delete(detail.orderId);
         window.dispatchEvent(
           new CustomEvent("pedizza:order-change", { detail }),
         );
-        if (detail.kind === "insert") {
-          lastRealtimeOrderAt.current = Date.now();
-          requestAnimationFrame(() => playOrderSound());
-        }
+        requestAnimationFrame(() => syncOrderAlarm());
         void load();
+      } catch {}
+    });
+    source.addEventListener("pending", (message) => {
+      try {
+        const detail = JSON.parse((message as MessageEvent<string>).data) as {
+          ids?: string[];
+        };
+        pendingOrders.current = new Set(detail.ids || []);
+        syncOrderAlarm();
       } catch {}
     });
     return () => source.close();

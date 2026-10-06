@@ -173,6 +173,12 @@ export function OrdersBoard({
       });
       const b = await r.json();
       if (!r.ok) throw new Error(b.error);
+      if (b?.id)
+        window.dispatchEvent(
+          new CustomEvent("pedizza:order-change", {
+            detail: { kind: "update", orderId: b.id, order: b },
+          }),
+        );
       if (printWindow)
         printWindow.location.href = `/app/pedidos/${action.order.id}/imprimir?auto=1`;
       setAction(null);
