@@ -12,12 +12,13 @@ import {
 import { getStoreOpenStatus, type BusinessHour } from "@/lib/domain/hours";
 import {
   lookupCep,
+  lookupAddress,
   quoteDelivery,
   addressSchema,
   deliveryOutOfRangeMessage,
   type Address,
 } from "@/lib/integrations/geo";
-import { interpretMessage } from "@/lib/integrations/openai";
+import { interpretMessage, type NaturalOrder } from "@/lib/integrations/openai";
 import { enqueue, notify } from "./events";
 import { priceCart } from "./pricing";
 import { finalizeCart } from "./orders";
@@ -43,6 +44,7 @@ type BotContext = {
   quoteHash?: string;
   page?: number;
   previousStep?: string;
+  pendingOrder?: NaturalOrder;
 };
 type Conversation = {
   id: string;
@@ -78,6 +80,31 @@ function firstName(name?: string) {
 function namedMessage(name: string | undefined, message: string) {
   const namePart = firstName(name);
   return namePart ? `*${namePart}*, ${message}` : message;
+}
+
+function shouldInterpretMessage(step: string, text: string) {
+  if (!text.trim() || /^\d+$/.test(normalizeText(text))) return false;
+  if (text.includes("?")) return true;
+  if (
+    [
+      "awaiting_name",
+      "awaiting_cep",
+      "awaiting_number",
+      "awaiting_street",
+      "awaiting_neighborhood",
+      "awaiting_complement",
+      "awaiting_observation",
+      "awaiting_coupon",
+      "awaiting_change",
+      "awaiting_email",
+      "ai_awaiting_size",
+      "ai_awaiting_border",
+    ].includes(step)
+  )
+    return false;
+  return /\b(quero|pedido|pedir|pizza|meia|meio|sabor|borda|entrega|retirada|status|tempo|demora|pronto|endere[cç]o|rob[oô]|intelig[eê]ncia|ia|atendente|humano|obrigad[oa]|oi|ol[aá])\b/i.test(
+    text,
+  );
 }
 
 const prompts: Record<string, string> = {
@@ -217,7 +244,61 @@ export async function processBotMessage(
   );
   if (!initial) return;
   const normalized = normalizeText(text);
+  const interpretation = shouldInterpretMessage(initial.current_step, text)
+    ? await interpretMessage(text, initial.current_step)
+    : null;
+  if (
+    interpretation &&
+    interpretation.intent !== "order" &&
+    normalized.includes("endereco") &&
+    ["entrega", "loja", "pizzaria", "retirada"].some((word) =>
+      normalized.includes(word),
+    )
+  )
+    interpretation.intent = "store_address";
+  if (
+    interpretation &&
+    (normalized.includes("meio a meio") ||
+      normalized.includes("meia a meia")) &&
+    !interpretation.order?.flavors.length
+  )
+    interpretation.intent = "split_help";
+  if (
+    interpretation &&
+    ["robo", "inteligencia artificial", "voce e ia"].some((word) =>
+      normalized.includes(word),
+    )
+  )
+    interpretation.intent = "identity";
+  const extractedOrder = interpretation?.order;
+  const naturalOrder = extractedOrder
+    ? {
+        ...extractedOrder,
+        category:
+          extractedOrder.category ||
+          (normalized.includes("broto")
+            ? "broto"
+            : normalized.includes("pizza")
+              ? "pizza"
+              : null),
+        size:
+          extractedOrder.size ||
+          (normalized.includes("grande")
+            ? "Grande"
+            : normalized.includes("broto")
+              ? "Broto"
+              : null),
+        service:
+          extractedOrder.service ||
+          (normalized.includes("entrega")
+            ? ("delivery" as const)
+            : normalized.includes("retirada") || normalized.includes("retirar")
+              ? ("pickup" as const)
+              : null),
+      }
+    : initial.context.pendingOrder;
   let savedAddress: Address | undefined;
+  let naturalAddress: Address | undefined;
   let cep: Awaited<ReturnType<typeof lookupCep>> | undefined,
     delivery: Awaited<ReturnType<typeof quoteDelivery>> | undefined,
     externalError: string | undefined,
@@ -271,6 +352,34 @@ export async function processBotMessage(
         tenant,
         addressSchema.parse(initial.context.address),
       );
+    if (naturalOrder?.service === "delivery" && naturalOrder.number) {
+      if (naturalOrder.postal_code) {
+        const naturalCep = await lookupCep(
+          tenant,
+          naturalOrder.postal_code.replace(/\D/g, ""),
+        );
+        naturalAddress = addressSchema.parse({
+          postal_code: naturalCep.cep.replace(/\D/g, ""),
+          street: naturalOrder.street || naturalCep.logradouro,
+          number: naturalOrder.number,
+          complement: naturalOrder.complement || "",
+          neighborhood: naturalOrder.neighborhood || naturalCep.bairro,
+          city: naturalOrder.city || naturalCep.localidade,
+          state: (naturalOrder.state || naturalCep.uf).toUpperCase(),
+        });
+      } else if (naturalOrder.street) {
+        naturalAddress = await lookupAddress(tenant, {
+          street: naturalOrder.street,
+          number: naturalOrder.number,
+          complement: naturalOrder.complement || "",
+          neighborhood: naturalOrder.neighborhood || undefined,
+          city: naturalOrder.city || undefined,
+          state: naturalOrder.state?.toUpperCase(),
+        });
+      }
+      if (naturalAddress)
+        delivery = await quoteDelivery(tenant, naturalAddress);
+    }
   } catch (e) {
     externalErrorCode = e instanceof AppError ? e.code : undefined;
     externalError =
@@ -278,10 +387,6 @@ export async function processBotMessage(
         ? e.message
         : "Não conseguimos validar o endereço. Confira os dados e tente novamente.";
   }
-  const interpretation =
-    !/^\d+$/.test(normalized) && text.includes("?")
-      ? await interpretMessage(text)
-      : null;
   await transaction(async (db) => {
     const c = await one<Conversation>(
       db,
@@ -583,6 +688,431 @@ export async function processBotMessage(
         prompts.awaiting_final_confirmation,
       );
     }
+
+    async function currentStepMessage() {
+      if (step === "main_menu") return menu.text;
+      if (step === "awaiting_product")
+        return categoryCatalog("Responda com o número ou o nome do produto.");
+      if (step === "awaiting_second_flavor")
+        return secondFlavorCatalog(
+          "Responda com o número ou o nome do segundo sabor.",
+        );
+      if (step === "cart_menu" && context.cartId) {
+        const summary = await cartSummary(db, tenant, context.cartId);
+        return cartMenuMessage(summary.text, customer?.name);
+      }
+      if (step === "awaiting_final_confirmation" && context.cartId) {
+        const summary = await cartSummary(db, tenant, context.cartId);
+        return buildFinalConfirmation(summary.text, summary.quote.total_cents);
+      }
+      if (
+        ["ai_awaiting_size", "ai_awaiting_border"].includes(step) &&
+        context.options?.length
+      )
+        return joinBlocks(
+          step === "ai_awaiting_size"
+            ? "Escolha o tamanho para continuarmos 🍕"
+            : "Escolha a borda para continuarmos 😋",
+          context.options
+            .map((item, index) => `${keycapNumber(index + 1)} ${item.name}`)
+            .join("\n"),
+        );
+      if (step === "awaiting_saved_address" && context.options?.length)
+        return joinBlocks(
+          prompts[step],
+          context.options
+            .map((item, index) => `${keycapNumber(index + 1)} ${item.name}`)
+            .join("\n"),
+        );
+      const kind = (
+        {
+          awaiting_category: "category",
+          browsing_category: "category",
+          awaiting_second_category: "second_category",
+          awaiting_size: "size",
+          awaiting_border: "border",
+          awaiting_payment: "payment",
+        } as Record<string, string>
+      )[step];
+      return joinBlocks(
+        prompts[step] || "Vamos continuar de onde paramos 😊",
+        kind ? await options(kind) : undefined,
+      );
+    }
+
+    async function latestOrderMessage() {
+      const order = await one<{
+        order_number: number;
+        order_status: string;
+        preparation_minutes: number | null;
+        accepted_at: Date | null;
+      }>(
+        db,
+        `select order_number,order_status,preparation_minutes,accepted_at
+         from public.orders where tenant_id=$1 and customer_id=$2
+         order by created_at desc limit 1`,
+        [tenant, c!.customer_id],
+      );
+      if (!order) return "Você ainda não tem pedidos nesta pizzaria. 😊";
+      let detail = `Seu pedido #${order.order_number} está: *${orderLabels[order.order_status]}*.`;
+      if (order.order_status === "new")
+        detail += " A pizzaria ainda precisa confirmar o recebimento.";
+      if (
+        ["accepted", "preparing"].includes(order.order_status) &&
+        order.accepted_at &&
+        order.preparation_minutes
+      ) {
+        const expected =
+          order.accepted_at.getTime() + order.preparation_minutes * 60_000;
+        const remaining = Math.ceil((expected - Date.now()) / 60_000);
+        detail +=
+          remaining > 0
+            ? ` A estimativa atual é de aproximadamente ${remaining} minuto${remaining === 1 ? "" : "s"}.`
+            : " A estimativa inicial já foi atingida; acompanhe a próxima atualização da pizzaria.";
+      }
+      return detail + " 🍕";
+    }
+
+    async function splitHelpMessage() {
+      const rules = await rows<{ split_pricing: string }>(
+        db,
+        "select distinct split_pricing from public.menu_categories where tenant_id=$1 and active and allow_split and archived_at is null",
+        [tenant],
+      );
+      if (!rules.length)
+        return "No momento, o cardápio desta pizzaria não possui categorias com dois sabores.";
+      const pricing =
+        rules.length === 1
+          ? rules[0].split_pricing === "highest"
+            ? "O valor considerado é o do sabor de maior preço."
+            : "O valor é calculado proporcionalmente entre os sabores."
+          : "O valor segue a regra configurada na categoria escolhida.";
+      return `Você pode pedir dois sabores meia a meia 🍕 Escolha o primeiro sabor e o tamanho; depois selecione o segundo sabor disponível no mesmo tamanho. ${pricing}`;
+    }
+
+    function businessHoursMessage() {
+      const days = [
+        "Domingo",
+        "Segunda-feira",
+        "Terça-feira",
+        "Quarta-feira",
+        "Quinta-feira",
+        "Sexta-feira",
+        "Sábado",
+      ];
+      const schedule = days.map((day, index) => {
+        const periods = hours.filter((hour) => hour.day_of_week === index);
+        return periods.length
+          ? `${day}: ${periods
+              .map(
+                (period) =>
+                  `${period.start_time.slice(0, 5)} às ${period.end_time.slice(0, 5)}`,
+              )
+              .join(" e ")}`
+          : `${day}: Fechado`;
+      });
+      return joinBlocks(
+        isOpen ? "Estamos abertos agora! 🍕" : "Estamos fechados agora.",
+        `*Horários de atendimento:*\n${schedule.join("\n")}`,
+      );
+    }
+
+    async function paymentMethodsMessage() {
+      const methods = await rows<{ name: string }>(
+        db,
+        "select name from public.payment_methods where tenant_id=$1 and active and type<>'pix_mercado_pago' and archived_at is null order by sort_order,id",
+        [tenant],
+      );
+      return methods.length
+        ? `Aceitamos estas formas de pagamento: ${methods.map((method) => method.name).join(", ")}. 💳`
+        : "As formas de pagamento ainda não foram cadastradas. Posso chamar a equipe para ajudar.";
+    }
+
+    type NaturalProduct = {
+      id: string;
+      name: string;
+      description: string;
+      categoryId: string;
+      categoryName: string;
+      allowSplit: boolean;
+      splitPricing: string;
+      basePrice: number | null;
+      sizes: { id: string; name: string }[];
+    };
+
+    async function naturalProducts() {
+      const result = await rows<{
+        id: string;
+        name: string;
+        description: string;
+        category_id: string;
+        category_name: string;
+        allow_split: boolean;
+        split_pricing: string;
+        base_price_cents: number | null;
+        size_id: string | null;
+        size_name: string | null;
+      }>(
+        db,
+        `select i.id,i.name,i.description,i.category_id,c.name category_name,
+          c.allow_split,c.split_pricing,i.base_price_cents,s.id size_id,s.name size_name
+         from public.menu_items i
+         join public.menu_categories c on c.tenant_id=i.tenant_id and c.id=i.category_id
+         left join public.menu_item_prices p on p.tenant_id=i.tenant_id and p.item_id=i.id and p.active
+         left join public.menu_sizes s on s.tenant_id=p.tenant_id and s.id=p.size_id and s.active and s.archived_at is null
+         where i.tenant_id=$1 and i.active and i.available and i.archived_at is null
+           and c.active and c.archived_at is null
+         order by c.sort_order,i.sort_order,i.id,s.sort_order,s.id`,
+        [tenant],
+      );
+      const grouped = new Map<string, NaturalProduct>();
+      for (const row of result) {
+        const product = grouped.get(row.id) || {
+          id: row.id,
+          name: row.name,
+          description: row.description,
+          categoryId: row.category_id,
+          categoryName: row.category_name,
+          allowSplit: row.allow_split,
+          splitPricing: row.split_pricing,
+          basePrice: row.base_price_cents,
+          sizes: [],
+        };
+        if (row.size_id && row.size_name)
+          product.sizes.push({ id: row.size_id, name: row.size_name });
+        grouped.set(row.id, product);
+      }
+      return [...grouped.values()];
+    }
+
+    function naturalMatches(
+      products: NaturalProduct[],
+      flavor: string,
+      category?: string | null,
+      size?: string | null,
+    ) {
+      const wanted = normalizeText(flavor);
+      let matches = products.filter((product) => {
+        const name = normalizeText(product.name);
+        const full = normalizeText(`${product.name} ${product.description}`);
+        return name === wanted || full === wanted || full.includes(wanted);
+      });
+      const categoryName = normalizeText(category || "");
+      if (categoryName) {
+        matches = matches.filter((product) => {
+          const candidate = normalizeText(product.categoryName);
+          if (categoryName.includes("broto"))
+            return candidate.includes("broto");
+          if (categoryName.includes("pizza"))
+            return candidate.includes("pizza") && !candidate.includes("broto");
+          return (
+            candidate.includes(categoryName) || categoryName.includes(candidate)
+          );
+        });
+      }
+      const sizeName = normalizeText(size || "");
+      if (sizeName)
+        matches = matches.filter(
+          (product) =>
+            !product.sizes.length ||
+            product.sizes.some((item) => normalizeText(item.name) === sizeName),
+        );
+      return matches;
+    }
+
+    async function applyNaturalOrder(draft: NaturalOrder) {
+      if (!isOpen) {
+        reply =
+          store?.closed_message ||
+          "Estamos fechados neste momento. Você pode consultar o cardápio ou falar com a equipe.";
+        return;
+      }
+      if (!customer?.name) {
+        const suppliedName = draft.customer_name?.trim();
+        if (suppliedName && suppliedName.length >= 2) {
+          await db.query(
+            "update public.customers set name=$3 where tenant_id=$1 and id=$2",
+            [tenant, c!.customer_id, suppliedName],
+          );
+          customer!.name = suppliedName;
+        } else {
+          context.pendingOrder = draft;
+          step = "awaiting_name";
+          reply = prompts[step];
+          return;
+        }
+      }
+      if (!draft.flavors.length) {
+        context.pendingOrder = undefined;
+        context.page = 0;
+        step = "awaiting_category";
+        reply = joinBlocks(prompts[step], await options("category"));
+        return;
+      }
+      const products = await naturalProducts();
+      const selectedProducts: NaturalProduct[] = [];
+      for (const flavor of draft.flavors) {
+        const matches = naturalMatches(
+          products,
+          flavor,
+          draft.category,
+          draft.size,
+        );
+        if (matches.length !== 1) {
+          context.pendingOrder = undefined;
+          context.page = 0;
+          step = "awaiting_category";
+          reply = joinBlocks(
+            matches.length
+              ? `Encontrei mais de uma opção para *${flavor}*. Vamos escolher pelo cardápio para eu anotar certinho 😊`
+              : `Não encontrei *${flavor}* no cardápio disponível. Vamos conferir as opções 😊`,
+            prompts[step],
+            await options("category"),
+          );
+          return;
+        }
+        selectedProducts.push(matches[0]);
+      }
+      const first = selectedProducts[0];
+      if (
+        selectedProducts.length === 2 &&
+        (!selectedProducts.every((product) => product.allowSplit) ||
+          selectedProducts.some(
+            (product) => product.splitPricing !== first.splitPricing,
+          ))
+      ) {
+        context.pendingOrder = undefined;
+        reply = joinBlocks(
+          "Essa combinação não está disponível como meia a meia. Escolha sabores de categorias compatíveis.",
+          await splitHelpMessage(),
+          await currentStepMessage(),
+        );
+        return;
+      }
+      const compatibleSizes = first.sizes.filter((size) =>
+        selectedProducts
+          .slice(1)
+          .every((product) =>
+            product.sizes.some(
+              (candidate) =>
+                normalizeText(candidate.name) === normalizeText(size.name),
+            ),
+          ),
+      );
+      const size = draft.size
+        ? compatibleSizes.find(
+            (item) => normalizeText(item.name) === normalizeText(draft.size!),
+          )
+        : compatibleSizes.length === 1
+          ? compatibleSizes[0]
+          : undefined;
+      if (first.sizes.length && !size) {
+        context.pendingOrder = draft;
+        context.options = compatibleSizes.map((item) => ({
+          id: item.id,
+          name: item.name,
+        }));
+        step = "ai_awaiting_size";
+        reply = joinBlocks(
+          "Só falta escolher o tamanho para eu montar esse item 🍕",
+          context.options
+            .map((item, index) => `${keycapNumber(index + 1)} ${item.name}`)
+            .join("\n"),
+        );
+        return;
+      }
+      context.cartId = await ensureCart(
+        db,
+        tenant,
+        c!.id,
+        c!.customer_id,
+        draft.service || "pickup",
+      );
+      let borderId: string | null = null;
+      if (draft.border) {
+        const borders = await rows<{ id: string; name: string }>(
+          db,
+          `select b.id,g.name || ' — ' || b.name name
+           from public.menu_borders b
+           join public.menu_border_groups g on g.tenant_id=b.tenant_id and g.id=b.group_id
+           join public.menu_border_group_categories bc on bc.tenant_id=g.tenant_id and bc.group_id=g.id
+           where b.tenant_id=$1 and bc.category_id=$2 and b.active and g.active
+             and b.archived_at is null and g.archived_at is null
+           order by g.sort_order,g.name,b.sort_order,b.name`,
+          [tenant, first.categoryId],
+        );
+        const borderName = normalizeText(draft.border);
+        const matches = borders.filter((border) => {
+          const full = normalizeText(border.name);
+          const option = full.split(" — ").at(-1) || full;
+          return (
+            full === borderName ||
+            option === borderName ||
+            full.includes(borderName)
+          );
+        });
+        if (matches.length !== 1) {
+          context.pendingOrder = draft;
+          context.options = matches.length ? matches : borders;
+          step = "ai_awaiting_border";
+          reply = joinBlocks(
+            matches.length
+              ? "Temos mais de uma borda com esse sabor. Qual você prefere? 😋"
+              : "Não encontrei essa borda. Escolha uma opção disponível:",
+            context.options
+              .map((item, index) => `${keycapNumber(index + 1)} ${item.name}`)
+              .join("\n"),
+          );
+          return;
+        }
+        borderId = matches[0].id;
+      }
+      await db.query(
+        "insert into public.cart_items(tenant_id,cart_id,product_ids,size_id,border_id,quantity,observation) values($1,$2,$3,$4,$5,1,'')",
+        [
+          tenant,
+          context.cartId,
+          selectedProducts.map((product) => product.id),
+          size?.id || null,
+          borderId,
+        ],
+      );
+      context.pendingOrder = undefined;
+      context.categoryId = first.categoryId;
+      context.categoryName = first.categoryName;
+      context.productIds = selectedProducts.map((product) => product.id);
+      context.sizeId = size?.id || null;
+      context.borderId = borderId;
+      if (draft.service === "delivery" && naturalAddress && delivery) {
+        context.address = naturalAddress;
+        await db.query(
+          "update public.carts set service_type='delivery',address_snapshot=$3,delivery_fee_cents=$4,distance_meters=$5 where tenant_id=$1 and id=$2",
+          [
+            tenant,
+            context.cartId,
+            JSON.stringify(naturalAddress),
+            delivery.fee_cents,
+            delivery.distance_meters,
+          ],
+        );
+        step = "awaiting_payment";
+        context.page = 0;
+        reply = joinBlocks(
+          "Pedido e endereço anotados! 🛵",
+          formatAddress(naturalAddress),
+          `Taxa: ${formatChatCurrency(delivery.fee_cents)}`,
+          prompts[step],
+          await options("payment"),
+        );
+      } else if (draft.service === "delivery") {
+        await requestDeliveryAddress();
+      } else if (draft.service === "pickup") {
+        await continueAfterAddress(pickupAddressMessage());
+      } else {
+        step = "awaiting_service";
+        reply = joinBlocks("Prontinho, já anotei o item! 😋", prompts[step]);
+      }
+    }
     if (
       normalized === "atendente" ||
       normalized === "humano" ||
@@ -621,7 +1151,28 @@ export async function processBotMessage(
       reply = menu.text;
       replyList = menu.list;
     } else if (externalError) {
-      if (externalErrorCode === "delivery_out_of_range") {
+      if (naturalOrder?.flavors.length) {
+        await applyNaturalOrder(naturalOrder);
+        const waitingForOrderDetail = [
+          "awaiting_name",
+          "ai_awaiting_size",
+          "ai_awaiting_border",
+          "awaiting_category",
+        ].includes(step);
+        if (waitingForOrderDetail) {
+          // Revalidamos o endereço depois que o dado pendente for informado.
+        } else if (externalErrorCode === "delivery_out_of_range") {
+          context.address = undefined;
+          context.quoteHash = undefined;
+          if (store?.pickup_enabled) {
+            step = "delivery_out_of_range";
+            reply = joinBlocks(deliveryOutOfRangeMessage, prompts[step]);
+          } else {
+            step = "main_menu";
+            reply = deliveryOutOfRangeMessage + "\n\n" + menu.text;
+          }
+        } else reply = joinBlocks(externalError, reply);
+      } else if (externalErrorCode === "delivery_out_of_range") {
         context.address = undefined;
         context.quoteHash = undefined;
         if (store?.pickup_enabled) {
@@ -632,25 +1183,118 @@ export async function processBotMessage(
           reply = deliveryOutOfRangeMessage + "\n\n" + menu.text;
         }
       } else reply = joinBlocks(externalError, prompts[step]);
-    } else if (text.includes("?") || interpretation?.intent === "question") {
+    } else if (interpretation?.intent === "order_status") {
+      reply = joinBlocks(
+        await latestOrderMessage(),
+        "Vamos continuar de onde paramos 😊",
+        await currentStepMessage(),
+      );
+    } else if (interpretation?.intent === "store_address") {
+      const address = store ? formatAddress(store) : "";
+      const postalCode = store?.postal_code.replace(/\D/g, "");
+      reply = joinBlocks(
+        address
+          ? `📍 *Endereço da ${store!.display_name}:*\n${address}${postalCode ? `\nCEP: ${postalCode.replace(/^(\d{5})(\d{3})$/, "$1-$2")}` : ""}`
+          : "O endereço ainda não foi cadastrado. Vou chamar a equipe para ajudar.",
+        "Vamos continuar de onde paramos 😊",
+        await currentStepMessage(),
+      );
+    } else if (interpretation?.intent === "store_hours") {
+      reply = joinBlocks(
+        businessHoursMessage(),
+        "Vamos continuar de onde paramos 😊",
+        await currentStepMessage(),
+      );
+    } else if (interpretation?.intent === "payment_methods") {
+      reply = joinBlocks(
+        await paymentMethodsMessage(),
+        "Vamos continuar de onde paramos 😊",
+        await currentStepMessage(),
+      );
+    } else if (interpretation?.intent === "split_help") {
+      reply = joinBlocks(
+        await splitHelpMessage(),
+        "Vamos continuar de onde paramos 😊",
+        await currentStepMessage(),
+      );
+    } else if (interpretation?.intent === "identity") {
+      reply = joinBlocks(
+        `Sou atendente da ${store?.display_name || "pizzaria"} e estou aqui para cuidar do seu pedido 😊🍕`,
+        "Vamos continuar de onde paramos:",
+        await currentStepMessage(),
+      );
+    } else if (interpretation?.intent === "small_talk") {
+      reply = joinBlocks(
+        normalized.includes("obrigad")
+          ? "Por nada! É um prazer ajudar 😊🍕"
+          : "Oi! Que bom falar com você 😊🍕",
+        await currentStepMessage(),
+      );
+    } else if (
+      interpretation?.intent === "order" &&
+      naturalOrder?.flavors.length
+    ) {
+      await applyNaturalOrder(naturalOrder);
+    } else if (
+      text.includes("?") ||
+      interpretation?.intent === "question" ||
+      interpretation?.intent === "search"
+    ) {
       const query = (interpretation?.query || text.replace(/[?!]/g, "")).slice(
         0,
-        100,
+        200,
       );
-      const candidates = await rows<{ name: string; description: string }>(
+      const words = normalizeText(query)
+        .split(/\s+/)
+        .filter(
+          (word) =>
+            word.length >= 3 &&
+            ![
+              "qual",
+              "quais",
+              "quanto",
+              "como",
+              "voces",
+              "voce",
+              "tem",
+            ].includes(word),
+        );
+      const catalog = await rows<{
+        name: string;
+        description: string;
+        price_cents: number | null;
+      }>(
         db,
-        "select name,description from public.menu_items where tenant_id=$1 and active and available and archived_at is null and (name ilike $2 or description ilike $2) limit 5",
-        [tenant, "%" + query + "%"],
+        `select i.name,i.description,
+          coalesce(min(p.price_cents) filter(where p.active),i.base_price_cents) price_cents
+         from public.menu_items i
+         left join public.menu_item_prices p on p.tenant_id=i.tenant_id and p.item_id=i.id
+         where i.tenant_id=$1 and i.active and i.available and i.archived_at is null
+         group by i.id,i.name,i.description,i.base_price_cents,i.sort_order
+         order by i.sort_order,i.name limit 250`,
+        [tenant],
       );
+      const candidates = catalog
+        .filter((item) => {
+          const source = normalizeText(`${item.name} ${item.description}`);
+          return (
+            words.length > 0 && words.every((word) => source.includes(word))
+          );
+        })
+        .slice(0, 8);
       reply = candidates.length
         ? candidates
             .map(
               (x) =>
-                `${x.name}: ${x.description || "Não há informações de ingredientes no cardápio."}`,
+                `*${x.name}${x.price_cents === null ? "" : ` — ${formatChatCurrency(x.price_cents)}`}*\n${x.description || "Não há informações adicionais no cardápio."}`,
             )
             .join("\n\n")
-        : "Não encontrei essa informação no cardápio. Digite ATENDENTE para falar com a equipe.";
-      reply += "\n\n" + (prompts[step] || prompts.main_menu);
+        : "Não encontrei essa informação nos dados da pizzaria. Posso chamar um atendente da equipe se você quiser.";
+      reply = joinBlocks(
+        reply,
+        "Vamos continuar de onde paramos 😊",
+        await currentStepMessage(),
+      );
     } else if (
       normalized === "mais" &&
       ["awaiting_size", "awaiting_border", "awaiting_payment"].includes(step)
@@ -748,18 +1392,51 @@ export async function processBotMessage(
             "update public.customers set name=$3 where tenant_id=$1 and id=$2",
             [tenant, c.customer_id, text.trim()],
           );
-          context.cartId = await ensureCart(
-            db,
-            tenant,
-            c.id,
-            c.customer_id,
-            "pickup",
-          );
-          context.address = undefined;
-          step = "awaiting_category";
-          context.page = 0;
-          reply = joinBlocks(prompts[step], await options("category"));
+          if (customer) customer.name = text.trim();
+          if (context.pendingOrder) {
+            const pending = {
+              ...context.pendingOrder,
+              customer_name: text.trim(),
+            };
+            await applyNaturalOrder(pending);
+          } else {
+            context.cartId = await ensureCart(
+              db,
+              tenant,
+              c.id,
+              c.customer_id,
+              "pickup",
+            );
+            context.address = undefined;
+            step = "awaiting_category";
+            context.page = 0;
+            reply = joinBlocks(prompts[step], await options("category"));
+          }
           break;
+        case "ai_awaiting_size": {
+          const choice = selected();
+          invariant(
+            choice && context.pendingOrder,
+            "Escolha um tamanho da lista.",
+          );
+          await applyNaturalOrder({
+            ...context.pendingOrder,
+            size: choice.name,
+          });
+          break;
+        }
+        case "ai_awaiting_border": {
+          const choice = selected();
+          invariant(
+            choice && context.pendingOrder,
+            "Escolha uma borda da lista.",
+          );
+          await applyNaturalOrder({
+            ...context.pendingOrder,
+            border: choice.name,
+          });
+          break;
+        }
         case "delivery_out_of_range":
           if (
             isChoice(

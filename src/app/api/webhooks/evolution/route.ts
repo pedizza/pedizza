@@ -6,6 +6,7 @@ import { AppError } from "@/lib/errors";
 import { acceptWebhook } from "@/lib/services/webhook";
 import { transaction, one } from "@/lib/db";
 export const runtime = "nodejs";
+export const maxDuration = 300;
 export async function POST(request: Request) {
   try {
     const secret = process.env.EVOLUTION_WEBHOOK_SECRET;

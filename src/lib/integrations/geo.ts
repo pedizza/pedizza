@@ -72,6 +72,80 @@ export async function lookupCep(tenant: string, cep: string) {
     604800,
   );
 }
+
+export async function lookupAddress(
+  tenant: string,
+  input: Partial<Address> & { street: string; number: string },
+) {
+  const query = [
+    input.street,
+    input.number,
+    input.neighborhood,
+    input.city,
+    input.state,
+    input.postal_code,
+    "Brasil",
+  ]
+    .filter(Boolean)
+    .join(", ");
+  return cached(
+    tenant,
+    "address:" + normalizeText(query),
+    addressSchema,
+    async () => {
+      const url = new URL("https://api.geoapify.com/v1/geocode/search");
+      url.search = new URLSearchParams({
+        text: query,
+        filter: "countrycode:br",
+        format: "json",
+        limit: "1",
+        apiKey: requiredEnv("GEOAPIFY_API_KEY"),
+      }).toString();
+      const result = z
+        .object({
+          results: z.array(
+            z.object({
+              street: z.string().optional(),
+              housenumber: z.string().optional(),
+              suburb: z.string().optional(),
+              district: z.string().optional(),
+              city: z.string().optional(),
+              town: z.string().optional(),
+              municipality: z.string().optional(),
+              postcode: z.string().optional(),
+              state_code: z.string().optional(),
+              rank: z.object({ confidence: z.number().optional() }).optional(),
+            }),
+          ),
+        })
+        .parse(await externalJson(url));
+      const match = result.results[0];
+      invariant(
+        match && (match.rank?.confidence ?? 0) >= 0.6,
+        "Não conseguimos localizar o endereço com precisão. Informe o CEP.",
+      );
+      const state = (input.state || match.state_code || "")
+        .split("-")
+        .at(-1)!
+        .toUpperCase();
+      return addressSchema.parse({
+        postal_code: (input.postal_code || match.postcode || "").replace(
+          /\D/g,
+          "",
+        ),
+        street: input.street || match.street || "",
+        number: input.number || match.housenumber || "",
+        complement: input.complement || "",
+        neighborhood:
+          input.neighborhood || match.suburb || match.district || "",
+        city:
+          input.city || match.city || match.town || match.municipality || "",
+        state,
+      });
+    },
+    604800,
+  );
+}
 const coordinates = z.object({ lat: z.number(), lon: z.number() });
 export async function geocode(tenant: string, address: Address) {
   const query = [

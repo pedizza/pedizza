@@ -6,6 +6,7 @@ import { privateFiles } from "@/lib/services/files";
 import { storeMedia } from "./media";
 import {
   sendText,
+  sendPresence,
   sendList,
   sendMedia,
   mediaBase64,
@@ -21,6 +22,7 @@ import { notify, enqueue } from "./events";
 import { normalizePhone } from "@/lib/domain/normalization";
 import { AppError, invariant } from "@/lib/errors";
 import { isPrivateAddress } from "@/lib/integrations/http";
+import { transcribeAudio } from "@/lib/integrations/openai";
 type Job = {
   id: string;
   tenant_id: string;
@@ -227,10 +229,7 @@ async function dispatchMessage(job: Job) {
         [job.tenant_id, job.id],
       ),
     );
-    if (
-      error instanceof AppError &&
-      error.code === "whatsapp_disconnected"
-    )
+    if (error instanceof AppError && error.code === "whatsapp_disconnected")
       throw error;
     const liveStatus = await syncWhatsAppInstance(
       job.tenant_id,
@@ -433,7 +432,7 @@ async function processEvolution(job: Job) {
     ),
   );
   const phone = normalizePhone(data.key.remoteJid.split("@")[0]);
-  const body = extractWhatsAppMessageText(data.message);
+  let body = extractWhatsAppMessageText(data.message);
   const record = await transaction(async (db) => {
     const customer = await one<{ id: string }>(
       db,
@@ -501,6 +500,8 @@ async function processEvolution(job: Job) {
       processed: false,
     };
   });
+  if (!record.processed && !data.key.fromMe)
+    await sendPresence(instance.instance_name, phone).catch(() => {});
   if (
     !body &&
     !record.processed &&
@@ -510,14 +511,22 @@ async function processEvolution(job: Job) {
   ) {
     try {
       const remote = await mediaBase64(instance.instance_name, data.key.id);
+      const mediaData = Buffer.from(
+        remote.base64.replace(/^data:[^;]+;base64,/, ""),
+        "base64",
+      );
       const saved = await storeMedia(
         tenant,
         record.conversationId,
-        Buffer.from(remote.base64.replace(/^data:[^;]+;base64,/, ""), "base64"),
+        mediaData,
         remote.fileName || "Anexo",
         false,
         remote.mimetype,
       );
+      const transcription = saved.mime.startsWith("audio/")
+        ? await transcribeAudio(mediaData, saved.mime, saved.name)
+        : null;
+      if (transcription) body = transcription;
       await transaction((db) =>
         db.query(
           "update public.conversation_messages set media_path=$3,media_mime=$4,media_name=$5,message_type=$6,body=$7 where tenant_id=$1 and id=$2",
@@ -528,7 +537,7 @@ async function processEvolution(job: Job) {
             saved.mime,
             saved.name,
             saved.mime.split("/")[0],
-            saved.name,
+            transcription ? `🎙️ ${transcription}` : saved.name,
           ],
         ),
       );

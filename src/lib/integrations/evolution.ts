@@ -95,6 +95,14 @@ export async function sendText(name: string, phone: string, text: string) {
   return z.object({ key: z.object({ id: z.string() }) }).parse(response).key.id;
 }
 
+export async function sendPresence(name: string, phone: string) {
+  await evolution(`/chat/sendPresence/${instancePath(name)}`, {
+    number: phone,
+    delay: 10_000,
+    presence: "composing",
+  });
+}
+
 export const whatsAppListSchema = z.object({
   title: z.string().min(1).max(60),
   description: z.string().max(1024).default(""),
