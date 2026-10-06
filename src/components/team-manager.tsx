@@ -86,7 +86,7 @@ export function TeamManager({ permissions }: { permissions: Permission[] }) {
     else await load();
   }
   return (
-    <div className="stack">
+    <div className="stack team-workspace">
       <div className="row between">
         <span className="muted">Cada pessoa com seu próprio acesso.</span>
         {permissions.includes("team.invite") && (
@@ -101,28 +101,30 @@ export function TeamManager({ permissions }: { permissions: Permission[] }) {
           {error}
         </p>
       )}
-      {data?.members.map((m) => (
-        <article className="data-row" key={m.id}>
-          <span className="avatar">{m.name.slice(0, 2).toUpperCase()}</span>
-          <div className="detail">
-            <h3>{m.name}</h3>
-            <small>{roleNames[m.role]}</small>
-          </div>
-          <span className={`badge ${m.active ? "green" : ""}`}>
-            {m.active ? "Ativo" : "Desativado"}
-          </span>
-          {m.role !== "owner" &&
-            permissions.includes("team.manage_permissions") && (
-              <button
-                className="icon-button"
-                onClick={() => setEditing(m)}
-                aria-label={"Editar acesso de " + m.name}
-              >
-                <Pencil size={16} />
-              </button>
-            )}
-        </article>
-      ))}
+      <div className="team-grid">
+        {data?.members.map((m) => (
+          <article className="data-row" key={m.id}>
+            <span className="avatar">{m.name.slice(0, 2).toUpperCase()}</span>
+            <div className="detail">
+              <h3>{m.name}</h3>
+              <small>{roleNames[m.role]}</small>
+            </div>
+            <span className={`badge ${m.active ? "green" : ""}`}>
+              {m.active ? "Ativo" : "Desativado"}
+            </span>
+            {m.role !== "owner" &&
+              permissions.includes("team.manage_permissions") && (
+                <button
+                  className="icon-button"
+                  onClick={() => setEditing(m)}
+                  aria-label={"Editar acesso de " + m.name}
+                >
+                  <Pencil size={16} />
+                </button>
+              )}
+          </article>
+        ))}
+      </div>
       {!!data?.invites.length && <h2>Convites pendentes</h2>}
       {data?.invites.map((i) => (
         <div className="data-row" key={i.id}>

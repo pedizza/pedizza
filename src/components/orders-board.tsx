@@ -208,8 +208,8 @@ export function OrdersBoard({
     },
   ];
   return (
-    <>
-      <div className="toolbar">
+    <div className="orders-workspace">
+      <div className="toolbar orders-toolbar">
         <div className="search">
           <Search size={17} />
           <input
@@ -256,8 +256,11 @@ export function OrdersBoard({
         </div>
       ) : (
         <div className="kanban">
-          {groups.map((g) => (
-            <section className="kanban-column" key={g.label}>
+          {groups.map((g, groupIndex) => (
+            <section
+              className={`kanban-column stage-${groupIndex}`}
+              key={g.label}
+            >
               <h2>
                 {g.label}
                 <span className="badge">
@@ -589,6 +592,6 @@ export function OrdersBoard({
           </form>
         )}
       </ResponsiveModal>
-    </>
+    </div>
   );
 }

@@ -48,8 +48,8 @@ export function Billing({
     }
   }
   return (
-    <div className="grid-2">
-      <section className="card">
+    <div className="grid-2 billing-workspace">
+      <section className="card billing-plan">
         <span className="eyebrow">PLANO PEDIZZA</span>
         <h1 style={{ fontSize: 45, margin: "20px 0 8px" }}>
           {lifetime ? "Vitalício" : formatCurrency(price)}

@@ -34,7 +34,9 @@ export async function ModulePage({
     ? visibleTabs.filter((tab) => activeGroup.keys.includes(tab.key))
     : visibleTabs;
   return (
-    <>
+    <div
+      className={`module-workspace ${title === "Configurações" ? "module-settings" : ""}`}
+    >
       {!hideHeader && <PageHeader title={title} description={description} />}
       {groups && (
         <nav className="tabs" aria-label="Seções do cardápio">
@@ -91,6 +93,6 @@ export async function ModulePage({
           }
         />
       )}
-    </>
+    </div>
   );
 }

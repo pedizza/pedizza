@@ -43,7 +43,9 @@ export function ResourceManager({
   const [sizes, setSizes] = useState<
     (ProductSize & { rowId: string; price: string })[]
   >([]);
-  const [borderOptions, setBorderOptions] = useState<EditableBorderOption[]>([]);
+  const [borderOptions, setBorderOptions] = useState<EditableBorderOption[]>(
+    [],
+  );
   const [borderCategoryIds, setBorderCategoryIds] = useState<string[]>([]);
   function updateSize(index: number, patch: Partial<(typeof sizes)[number]>) {
     setSizes((current) =>
@@ -153,9 +155,7 @@ export function ResourceManager({
             },
           ],
     );
-    setBorderCategoryIds(
-      row ? ((row.category_ids || []) as string[]) : [],
-    );
+    setBorderCategoryIds(row ? ((row.category_ids || []) as string[]) : []);
     setEditing(row);
     setDirty(false);
     setOpen(true);
@@ -283,9 +283,7 @@ export function ResourceManager({
       setToast(available ? "Produto reativado." : "Produto pausado.");
     } catch (e) {
       setError(
-        e instanceof Error
-          ? e.message
-          : "Não foi possível alterar o produto.",
+        e instanceof Error ? e.message : "Não foi possível alterar o produto.",
       );
     } finally {
       setToggling(null);
@@ -343,10 +341,15 @@ export function ResourceManager({
     );
   }
   return (
-    <section className="stack">
-      <div className="toolbar">
+    <section className="stack resource-workspace" data-resource={resourceKey}>
+      <div className="toolbar resource-heading">
         <div>
-          <h2 style={{ marginBottom: 5 }}>{resource.title}</h2>
+          <div className="resource-title">
+            <h2>{resource.title}</h2>
+            {!resource.singleton && (
+              <span className="resource-count">{total}</span>
+            )}
+          </div>
           <small>{resource.description}</small>
         </div>
         {canEdit && resourceKey !== "regras-precos" && (
@@ -382,44 +385,46 @@ export function ResourceManager({
           </small>
         </div>
       )}
-      {resourceKey === "produtos" && (
-        <label className="product-category-filter">
-          Categoria
-          <select
-            value={category}
-            onChange={(e) => {
-              setCategory(e.target.value);
+      <div className="resource-filterbar">
+        {resourceKey === "produtos" && (
+          <label className="product-category-filter">
+            Categoria
+            <select
+              value={category}
+              onChange={(e) => {
+                setCategory(e.target.value);
+                setPage(1);
+                setLoading(true);
+              }}
+            >
+              <option value="">Todas as categorias</option>
+              {categories.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        {resource.search && (
+          <form
+            className="search"
+            onSubmit={(e) => {
+              e.preventDefault();
               setPage(1);
-              setLoading(true);
+              setSearch(query);
             }}
           >
-            <option value="">Todas as categorias</option>
-            {categories.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-        </label>
-      )}
-      {resource.search && (
-        <form
-          className="search"
-          onSubmit={(e) => {
-            e.preventDefault();
-            setPage(1);
-            setSearch(query);
-          }}
-        >
-          <Search size={17} />
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder={`Buscar ${resource.title.toLowerCase()}…`}
-            aria-label="Buscar registros"
-          />
-        </form>
-      )}
+            <Search size={17} />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder={`Buscar ${resource.title.toLowerCase()}…`}
+              aria-label="Buscar registros"
+            />
+          </form>
+        )}
+      </div>
       {error && !open && (
         <p className="feedback" role="alert">
           {error}
@@ -439,7 +444,7 @@ export function ResourceManager({
           />
         </div>
       ) : resource.singleton ? (
-        <div className="card form-grid">
+        <div className="card form-grid settings-summary">
           {resourceKey === "loja" && (
             <ImageUpload
               resource={resourceKey}
@@ -466,7 +471,7 @@ export function ResourceManager({
           ))}
         </div>
       ) : (
-        <div className="data-list">
+        <div className="data-list resource-data">
           {resourceKey === "produtos" && (
             <div className="product-list-head" aria-hidden="true">
               <span>Imagem</span>
@@ -510,6 +515,11 @@ export function ResourceManager({
                   />
                 </div>
               )}
+              {resourceKey === "clientes" && (
+                <span className="customer-avatar">
+                  {label(row).slice(0, 2).toUpperCase()}
+                </span>
+              )}
               <div className="detail">
                 <h3>
                   {resourceKey === "clientes" ? (
@@ -548,29 +558,29 @@ export function ResourceManager({
                 {resourceKey !== "produtos" &&
                   resourceKey !== "categorias" &&
                   resourceKey !== "bordas" && (
-                  <p>
-                    {resource.fields
-                      .filter(
-                        (f) =>
-                          f.key !== "name" &&
-                          f.key !== "description" &&
-                          f.key !== "active" &&
-                          f.key !== "blocked" &&
-                          !f.reference &&
-                          row[f.key] != null &&
-                          row[f.key] !== "" &&
-                          f.type !== "checkbox",
-                      )
-                      .slice(0, 3)
-                      .map((f) =>
-                        f.type === "money"
-                          ? formatCurrency(Number(row[f.key]))
-                          : optionLabels[String(row[f.key])] ||
-                            String(row[f.key]),
-                      )
-                      .join(" · ")}
-                  </p>
-                )}
+                    <p>
+                      {resource.fields
+                        .filter(
+                          (f) =>
+                            f.key !== "name" &&
+                            f.key !== "description" &&
+                            f.key !== "active" &&
+                            f.key !== "blocked" &&
+                            !f.reference &&
+                            row[f.key] != null &&
+                            row[f.key] !== "" &&
+                            f.type !== "checkbox",
+                        )
+                        .slice(0, 3)
+                        .map((f) =>
+                          f.type === "money"
+                            ? formatCurrency(Number(row[f.key]))
+                            : optionLabels[String(row[f.key])] ||
+                              String(row[f.key]),
+                        )
+                        .join(" · ")}
+                    </p>
+                  )}
               </div>
               {resourceKey === "categorias" && (
                 <div className="category-order">
@@ -701,17 +711,11 @@ export function ResourceManager({
                             ? `Pausar ${label(row)}`
                             : `Reativar ${label(row)}`
                         }
-                        title={
-                          row.active ? "Pausar borda" : "Reativar borda"
-                        }
+                        title={row.active ? "Pausar borda" : "Reativar borda"}
                         disabled={toggling === row.id}
                         onClick={() => void toggleBorderGroup(row)}
                       >
-                        {row.active ? (
-                          <Pause size={15} />
-                        ) : (
-                          <Play size={15} />
-                        )}
+                        {row.active ? <Pause size={15} /> : <Play size={15} />}
                       </button>
                     )}
                   </>
@@ -1080,7 +1084,9 @@ export function ResourceManager({
                         disabled={borderOptions.length === 1}
                         onClick={() => {
                           setBorderOptions((current) =>
-                            current.filter((_, itemIndex) => itemIndex !== index),
+                            current.filter(
+                              (_, itemIndex) => itemIndex !== index,
+                            ),
                           );
                           setDirty(true);
                         }}

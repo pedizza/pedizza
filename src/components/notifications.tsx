@@ -1,7 +1,7 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { SlidersHorizontal, Trash2 } from "lucide-react";
+import { SlidersHorizontal, Trash2, Bell } from "lucide-react";
 import { EmptyState } from "./ui/states";
 import { useRealtime } from "./realtime";
 import { ResponsiveModal } from "./ui/modal";
@@ -163,39 +163,40 @@ export function Notifications({ tenantId }: { tenantId: string }) {
           items.map((n) => (
             <article
               key={n.id}
-              style={{
-                padding: 20,
-                borderBottom: "1px solid var(--border)",
-                background: n.read_at ? undefined : "var(--surface-soft)",
-              }}
+              className={`notification-entry ${n.read_at ? "" : "unread"}`}
             >
-              <div className="row between">
-                <strong>{n.title}</strong>
-                <time className="muted">
-                  {new Date(n.created_at).toLocaleString("pt-BR")}
-                </time>
-              </div>
-              <p>{n.body}</p>
-              <div className="row">
-                {n.action_url.startsWith("/app/") &&
-                  !n.action_url.startsWith("//") && (
-                    <Link
-                      href={n.action_url}
+              <span className="notification-entry-icon">
+                <Bell size={18} />
+              </span>
+              <div className="notification-entry-content">
+                <div className="row between">
+                  <strong>{n.title}</strong>
+                  <time className="muted">
+                    {new Date(n.created_at).toLocaleString("pt-BR")}
+                  </time>
+                </div>
+                <p>{n.body}</p>
+                <div className="row">
+                  {n.action_url.startsWith("/app/") &&
+                    !n.action_url.startsWith("//") && (
+                      <Link
+                        href={n.action_url}
+                        className="btn ghost small"
+                        onClick={() => void run({ action: "read", id: n.id })}
+                      >
+                        Ver detalhes
+                      </Link>
+                    )}
+                  {!n.read_at && (
+                    <button
+                      disabled={busy}
                       className="btn ghost small"
-                      onClick={() => void run({ action: "read", id: n.id })}
+                      onClick={() => run({ action: "read", id: n.id })}
                     >
-                      Ver detalhes
-                    </Link>
+                      Marcar como lida
+                    </button>
                   )}
-                {!n.read_at && (
-                  <button
-                    disabled={busy}
-                    className="btn ghost small"
-                    onClick={() => run({ action: "read", id: n.id })}
-                  >
-                    Marcar como lida
-                  </button>
-                )}
+                </div>
               </div>
             </article>
           ))

@@ -113,7 +113,7 @@ export default async function Page({
   ];
   const max = Math.max(1, ...result.chart.map((x) => Number(x.total)));
   return (
-    <>
+    <div className="overview-workspace">
       <PageHeader
         title={`Olá, ${ctx.name.split(" ")[0]}.`}
         description="Vamos acompanhar o movimento da sua pizzaria?"
@@ -152,7 +152,11 @@ export default async function Page({
                 <span className="badge">Pedidos concluídos</span>
               </div>
               {result.chart.length ? (
-                <div className="chart" role="img" aria-label="Vendas por dia">
+                <div
+                  className="chart revenue-chart"
+                  role="img"
+                  aria-label="Vendas por dia"
+                >
                   {result.chart.map((v) => (
                     <div
                       className="chart-bar"
@@ -283,6 +287,6 @@ export default async function Page({
           </section>
         </div>
       </div>
-    </>
+    </div>
   );
 }

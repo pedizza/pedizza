@@ -19,6 +19,7 @@ import {
   LogOut,
   ChevronDown,
   Store,
+  ChevronRight,
 } from "lucide-react";
 import type { TenantContext } from "@/lib/auth/context";
 import { navigation } from "@/lib/navigation";
@@ -65,9 +66,19 @@ export function AppShell({
       document.removeEventListener("keydown", escape);
     };
   }, [open]);
-  const links = navigation.filter((n) =>
-    ctx.permissions.includes(n.permission),
-  );
+  const priority = [
+    "/app/pedidos",
+    "/app/conversas",
+    "/app/cardapio",
+    "/app/visao-geral",
+  ];
+  const links = navigation
+    .filter((n) => ctx.permissions.includes(n.permission))
+    .sort((a, b) => {
+      const rank = (href: string) =>
+        priority.includes(href) ? priority.indexOf(href) : priority.length;
+      return rank(a.href) - rank(b.href);
+    });
   const current = links.find((n) => path.startsWith(n.href));
   async function switchTenant(id: string) {
     const r = await fetch("/api/tenant", {
@@ -81,7 +92,7 @@ export function AppShell({
     }
   }
   return (
-    <div className="shell">
+    <div className="shell" data-module={path.split("/")[2] || "inicio"}>
       <PwaRegistration />
       {open && (
         <button
@@ -100,7 +111,16 @@ export function AppShell({
             priority
           />
         </Link>
-        <div className="nav-section-label">SUA OPERAÇÃO</div>
+        <div className="workspace-card">
+          <span className="workspace-icon">
+            <Store size={18} />
+          </span>
+          <div>
+            <small>SUA PIZZARIA</small>
+            <strong>{ctx.tenantName}</strong>
+          </div>
+        </div>
+        <div className="nav-section-label">OPERAÇÃO</div>
         <nav className="nav-list" aria-label="Navegação principal">
           {links.map((n) => {
             const Icon = icons[n.icon as keyof typeof icons];
@@ -114,7 +134,10 @@ export function AppShell({
                 className={`nav-link ${path.startsWith(n.href) ? "active" : ""}`}
               >
                 <Icon size={18} />
-                {n.label}
+                <span>{n.label}</span>
+                {path.startsWith(n.href) && (
+                  <ChevronRight size={14} className="nav-current-arrow" />
+                )}
               </Link>
             );
           })}
@@ -178,7 +201,9 @@ export function AppShell({
                     ? "Minha assinatura"
                     : "Minha loja")}
             </span>
-            <span className="badge desktop-only">Painel da pizzaria</span>
+            <span className="topbar-context desktop-only">
+              Espaço de trabalho
+            </span>
           </div>
           <div className="row">
             <Store size={17} className="muted" />
@@ -204,7 +229,7 @@ export function AppShell({
             )}
           </div>
         </header>
-        <main className="page-content">{children}</main>
+        <main className="page-content workspace-content">{children}</main>
       </div>
       <nav className="mobile-nav" aria-label="Navegação mobile">
         {links.slice(0, 3).map((n) => {

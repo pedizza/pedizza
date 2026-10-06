@@ -1,6 +1,5 @@
 "use client";
 import { useActionState } from "react";
-import Image from "next/image";
 import Link from "next/link";
 import {
   ArrowRight,
@@ -38,7 +37,7 @@ export function AuthForm({
     {},
   );
   const title = {
-    login: "Bom ter você de volta.",
+    login: "Entre na sua conta",
     signup: "Sua pizzaria começa aqui.",
     recover: "Vamos recuperar seu acesso.",
     resend: "Confirme seu e-mail.",
@@ -49,22 +48,15 @@ export function AuthForm({
       <aside className="auth-story">
         <span className="eyebrow">GESTÃO FEITA PARA PIZZARIAS</span>
         <div>
-          <Image
-            src="/logo.png"
-            alt="Pedizza"
-            width={240}
-            height={220}
-            priority
-          />
           <h1>
-            Sua operação,
+            Pedidos chegando.
             <br />
-            no ponto certo.
+            Sua loja no controle.
           </h1>
           <p className="muted">
-            Sua equipe, seus clientes e seus pedidos.
+            Do atendimento à entrega.
             <br />
-            Tudo junto para sua pizzaria ir mais longe.
+            Tudo o que você precisa para operar sua pizzaria.
           </p>
         </div>
         <div className="auth-capabilities">
@@ -84,13 +76,6 @@ export function AuthForm({
       </aside>
       <section className="auth-content">
         <div className="auth-form">
-          <Image
-            src="/logo.png"
-            alt="Pedizza"
-            width={90}
-            height={82}
-            priority
-          />
           <h1>{title}</h1>
           <p className="muted">
             {mode === "signup"
