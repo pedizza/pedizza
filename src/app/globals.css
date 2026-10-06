@@ -790,12 +790,106 @@ small {
   padding: 12px;
   border-radius: 14px;
   min-height: 340px;
+  max-height: calc(100dvh - 300px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: #c9cec5 transparent;
 }
 .kanban-column > h2 {
+  position: sticky;
+  z-index: 2;
+  top: -12px;
   font-size: 12px;
   display: flex;
   justify-content: space-between;
-  padding: 5px;
+  padding: 17px 5px 10px;
+  margin: -12px 0 8px;
+  background: #eef0e9;
+}
+
+.store-status-wrap {
+  min-width: min(100%, 390px);
+  display: grid;
+  justify-items: end;
+  gap: 7px;
+}
+
+.store-status-current {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.store-status-current > span {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #91978f;
+}
+
+.store-status-current.open {
+  color: var(--green);
+}
+
+.store-status-current.open > span {
+  background: #2c985e;
+  box-shadow: 0 0 0 4px #dff3e7;
+}
+
+.store-status-current.paused {
+  color: #a76508;
+}
+
+.store-status-current.paused > span {
+  background: #dd931f;
+  box-shadow: 0 0 0 4px #fff0d2;
+}
+
+.store-status-current.closed {
+  color: #a9251d;
+}
+
+.store-status-current.closed > span {
+  background: var(--red);
+  box-shadow: 0 0 0 4px var(--red-soft);
+}
+
+.store-status-actions {
+  display: inline-flex;
+  padding: 4px;
+  gap: 3px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 4px 14px #1d281d0a;
+}
+
+.store-status-actions button {
+  min-height: 35px;
+  padding: 8px 11px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  border-radius: 8px;
+  color: var(--muted);
+  background: transparent;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.store-status-actions button:hover,
+.store-status-actions button.active {
+  color: var(--ink);
+  background: #f1f3ee;
+}
+
+.store-status-error {
+  color: #a9251d;
 }
 
 .desktop-orders-shell {
@@ -1147,6 +1241,21 @@ small {
   }
   .page-header .btn {
     font-size: 12px;
+  }
+  .store-status-wrap {
+    width: 100%;
+    min-width: 0;
+    justify-items: stretch;
+  }
+  .store-status-current {
+    justify-content: flex-end;
+  }
+  .store-status-actions {
+    width: 100%;
+  }
+  .store-status-actions button {
+    flex: 1;
+    justify-content: center;
   }
   .stats {
     gap: 10px;

@@ -13,6 +13,7 @@ import {
   orderColumns,
   changeOrder,
   confirmManualPayment,
+  listOrders,
   type Order,
 } from "@/lib/services/orders";
 export async function GET(request: Request) {
@@ -50,22 +51,7 @@ export async function GET(request: Request) {
           .parse(url.searchParams.get("page") || 1);
         const status = url.searchParams.get("status") || "";
         const search = (url.searchParams.get("q") || "").slice(0, 100);
-        const args = [ctx.tenantId, status, "%" + search + "%"];
-        const where =
-          "tenant_id=$1 and ($2='' or order_status=$2) and (customer_name_snapshot ilike $3 or order_number::text ilike $3)";
-        const count = await one<{ total: number }>(
-          db,
-          `select count(*)::int total from public.orders where ${where}`,
-          args,
-        );
-        return {
-          data: await rows<Order>(
-            db,
-            `select ${orderColumns} from public.orders where ${where} order by created_at desc,id limit 20 offset $4`,
-            [...args, (page - 1) * 20],
-          ),
-          total: count?.total || 0,
-        };
+        return listOrders(db, ctx.tenantId, { status, search, page });
       }, ctx.userId),
     );
   } catch (e) {

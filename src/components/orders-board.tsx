@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { Printer, MessageCircle, ArrowRight, Search } from "lucide-react";
 import type { Order } from "@/lib/services/orders";
@@ -36,44 +36,121 @@ export function OrdersBoard({
   permissions,
   autoPrint = false,
   showConversation = true,
+  initialOrders = [],
+  initialTotal = 0,
+  initialObservedAt,
+  soundEnabled = false,
 }: {
   tenantId: string;
   permissions: Permission[];
   autoPrint?: boolean;
   showConversation?: boolean;
+  initialOrders?: Order[];
+  initialTotal?: number;
+  initialObservedAt?: string;
+  soundEnabled?: boolean;
 }) {
-  const [orders, setOrders] = useState<Order[]>([]),
+  const [orders, setOrders] = useState<Order[]>(initialOrders),
     [filter, setFilter] = useState(""),
     [page, setPage] = useState(1),
-    [total, setTotal] = useState(0),
+    [total, setTotal] = useState(initialTotal),
     [search, setSearch] = useState(""),
+    [query, setQuery] = useState(""),
     [error, setError] = useState(""),
     [detail, setDetail] = useState<Detail | null>(null),
     [action, setAction] = useState<{ order: Order; status: string } | null>(
       null,
     ),
     [busy, setBusy] = useState(false);
-  const load = useCallback(
-    () =>
-      fetch(
-        `/api/orders?status=${filter}&page=${page}&q=${encodeURIComponent(search)}`,
-      )
-        .then(async (r) => {
-          const b = await r.json();
-          if (!r.ok) throw new Error(b.error);
-          return b;
-        })
-        .then((b) => {
-          setOrders(b.data);
-          setTotal(b.total);
-        })
-        .catch((e) => setError(e.message)),
-    [filter, page, search],
-  );
+  const loading = useRef(false),
+    skipInitialLoad = useRef(!!initialObservedAt),
+    audio = useRef<HTMLAudioElement | null>(null),
+    latestCreatedAt = useRef(
+      Date.parse(initialObservedAt || "1970-01-01T00:00:00.000Z"),
+    );
+
   useEffect(() => {
+    const timer = setTimeout(() => setQuery(search), 250);
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  useEffect(() => {
+    if (!soundEnabled) return;
+    const player = new Audio("/sounds/toque-pedido-novo.mp3");
+    player.preload = "auto";
+    audio.current = player;
+    function unlock() {
+      player.muted = true;
+      void player
+        .play()
+        .then(() => {
+          player.pause();
+          player.currentTime = 0;
+          player.muted = false;
+          window.removeEventListener("pointerdown", unlock);
+          window.removeEventListener("keydown", unlock);
+        })
+        .catch(() => {
+          player.muted = false;
+        });
+    }
+    window.addEventListener("pointerdown", unlock);
+    window.addEventListener("keydown", unlock);
+    return () => {
+      window.removeEventListener("pointerdown", unlock);
+      window.removeEventListener("keydown", unlock);
+      player.pause();
+      audio.current = null;
+    };
+  }, [soundEnabled]);
+
+  const load = useCallback(async () => {
+    if (loading.current) return;
+    loading.current = true;
+    try {
+      const response = await fetch(
+        `/api/orders?status=${filter}&page=${page}&q=${encodeURIComponent(query)}`,
+        { cache: "no-store" },
+      );
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error);
+      const next = body.data as Order[];
+      const newOrder = next.some(
+        (order) =>
+          order.order_status === "new" &&
+          new Date(order.created_at).getTime() > latestCreatedAt.current,
+      );
+      for (const order of next)
+        latestCreatedAt.current = Math.max(
+          latestCreatedAt.current,
+          new Date(order.created_at).getTime(),
+        );
+      setOrders(next);
+      setTotal(body.total);
+      setError("");
+      if (newOrder && audio.current) {
+        requestAnimationFrame(() => {
+          if (!audio.current) return;
+          audio.current.currentTime = 0;
+          void audio.current.play().catch(() => {});
+        });
+      }
+    } catch (reason) {
+      setError(
+        reason instanceof Error ? reason.message : "Falha ao carregar pedidos.",
+      );
+    } finally {
+      loading.current = false;
+    }
+  }, [filter, page, query]);
+  useEffect(() => {
+    if (skipInitialLoad.current) {
+      skipInitialLoad.current = false;
+      return;
+    }
     void load();
   }, [load]);
-  useRealtime(tenantId, "orders", () => void load());
+  useRealtime(tenantId, "orders", () => void load(), undefined, 1000);
   async function inspect(id: string) {
     const r = await fetch("/api/orders?id=" + id);
     const b = await r.json();

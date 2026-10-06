@@ -19,7 +19,8 @@ export const weeklyHoursSchema = z
   )
   .max(7)
   .refine(
-    (hours) => new Set(hours.map((hour) => hour.day_of_week)).size === hours.length,
+    (hours) =>
+      new Set(hours.map((hour) => hour.day_of_week)).size === hours.length,
     "Cadastre somente um horário por dia.",
   );
 const minute = (t: string) =>
@@ -70,8 +71,7 @@ export function getStoreOpenStatus(
       currentPeriod = h;
   }
   return {
-    isOpen:
-      mode === "forced_open" || (mode !== "forced_closed" && !!currentPeriod),
+    isOpen: mode === "forced_open" || (mode === "automatic" && !!currentPeriod),
     reason: mode === "automatic" ? "schedule" : mode,
     currentPeriod,
     nextOpening: getNextOpeningTime(hours, timezone, now),

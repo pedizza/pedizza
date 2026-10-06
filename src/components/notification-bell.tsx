@@ -1,9 +1,11 @@
 "use client";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { Bell } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRealtime } from "./realtime";
 export function NotificationBell({ tenantId }: { tenantId: string }) {
+  const pathname = usePathname();
   const [unread, setUnread] = useState(0);
   const knownNotifications = useRef<Set<string> | null>(null),
     audio = useRef<HTMLAudioElement | null>(null),
@@ -56,6 +58,7 @@ export function NotificationBell({ tenantId }: { tenantId: string }) {
         );
         if (
           hasNewOrder &&
+          !pathname.startsWith("/app/pedidos") &&
           b.preferences?.sound_enabled &&
           b.preferences?.orders_enabled &&
           audio.current
@@ -68,9 +71,9 @@ export function NotificationBell({ tenantId }: { tenantId: string }) {
       .finally(() => {
         loading.current = false;
       });
-  }, []);
+  }, [pathname]);
   useEffect(load, [load]);
-  useRealtime(tenantId, "notifications", load);
+  useRealtime(tenantId, "notifications", load, undefined, 1500);
   return (
     <Link
       href="/app/notificacoes"

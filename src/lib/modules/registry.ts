@@ -107,6 +107,7 @@ export const resources: Record<string, Resource> = {
         options: [
           { value: "automatic", label: "automatic" },
           { value: "forced_open", label: "forced_open" },
+          { value: "paused", label: "paused" },
           { value: "forced_closed", label: "forced_closed" },
         ],
       },
@@ -1046,6 +1047,7 @@ export function resourceSchema(resource: Resource) {
 export const optionLabels: Record<string, string> = {
   automatic: "Automático",
   forced_open: "Forçar aberta",
+  paused: "Pausada",
   forced_closed: "Forçar fechada",
   highest: "Maior valor",
   proportional: "Proporcional",

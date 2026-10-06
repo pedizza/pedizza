@@ -65,6 +65,14 @@ describe("domain invariants", () => {
       getStoreOpenStatus(
         hours,
         "America/Sao_Paulo",
+        "paused",
+        new Date("2026-10-03T03:30:00Z"),
+      ).isOpen,
+    ).toBe(false);
+    expect(
+      getStoreOpenStatus(
+        hours,
+        "America/Sao_Paulo",
         "forced_closed",
         new Date("2026-10-03T03:30:00Z"),
       ).isOpen,

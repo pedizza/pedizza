@@ -6,6 +6,7 @@ export function useRealtime(
   table: string,
   onChange: () => void,
   filter?: string,
+  intervalMs = 5000,
 ) {
   const callback = useRef(onChange);
   useEffect(() => {
@@ -15,7 +16,7 @@ export function useRealtime(
     const refresh = () => {
       if (document.visibilityState === "visible") callback.current();
     };
-    const timer = setInterval(refresh, 5000);
+    const timer = setInterval(refresh, intervalMs);
     window.addEventListener("focus", refresh);
     document.addEventListener("visibilitychange", refresh);
     return () => {
@@ -23,5 +24,5 @@ export function useRealtime(
       window.removeEventListener("focus", refresh);
       document.removeEventListener("visibilitychange", refresh);
     };
-  }, [tenantId, table, filter]);
+  }, [tenantId, table, filter, intervalMs]);
 }

@@ -40,6 +40,35 @@ export type Order = {
 };
 export const orderColumns =
   "id,tenant_id,order_number,customer_id,conversation_id,order_status,payment_status,service_type,total_cents,subtotal_cents,discount_cents,delivery_fee_cents,customer_name_snapshot,customer_phone_snapshot,payment_method_type,payment_method_name_snapshot,delivery_address_snapshot,preparation_minutes,created_at,updated_at,change_for_cents,coupon_code_snapshot";
+
+export async function listOrders(
+  db: DB,
+  tenantId: string,
+  {
+    status = "",
+    search = "",
+    page = 1,
+  }: { status?: string; search?: string; page?: number } = {},
+) {
+  const found = await rows<Order & { total_count: number }>(
+    db,
+    `select ${orderColumns},count(*) over()::int total_count
+     from public.orders
+     where tenant_id=$1
+       and ($2='' or order_status=$2)
+       and (customer_name_snapshot ilike $3 or order_number::text ilike $3)
+     order by created_at desc,id
+     limit 20 offset $4`,
+    [tenantId, status, "%" + search + "%", (page - 1) * 20],
+  );
+  return {
+    data: found.map(({ total_count, ...order }) => {
+      void total_count;
+      return order;
+    }),
+    total: found[0]?.total_count || 0,
+  };
+}
 export async function orderSummary(db: DB, order: Order) {
   const items = await rows<{
     name_snapshot: string;
