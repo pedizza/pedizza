@@ -10,6 +10,8 @@ import {
   sendMedia,
   mediaBase64,
   whatsAppListSchema,
+  configureWebhook,
+  getConnection,
 } from "@/lib/integrations/evolution";
 import { extractWhatsAppMessageText } from "@/lib/domain/whatsapp";
 import { reconcileMpPayment } from "@/lib/integrations/mercado-pago";
@@ -45,6 +47,7 @@ async function fail(
   table: "outbox" | "webhook_events",
   job: Job,
   terminal = false,
+  delaySeconds?: number,
 ) {
   await transaction((db) =>
     db.query(
@@ -52,7 +55,7 @@ async function fail(
       [
         job.id,
         terminal || job.attempts >= 5 ? "failed" : "pending",
-        Math.min(3600, 30 * 2 ** job.attempts),
+        delaySeconds ?? Math.min(3600, 30 * 2 ** job.attempts),
       ],
     ),
   );
@@ -68,8 +71,13 @@ export async function processOutbox(limit = 8) {
       } else if (job.kind === "push") await dispatchPush(job);
       else throw new Error("Unknown job");
       await complete("outbox", job.id);
-    } catch {
-      await fail("outbox", job, job.kind === "message");
+    } catch (error) {
+      const code = error instanceof AppError ? error.code : "";
+      if (job.kind === "message" && code === "whatsapp_send_retry")
+        await fail("outbox", job, job.attempts >= 2, 0);
+      else if (job.kind === "message" && code === "whatsapp_disconnected")
+        await fail("outbox", job, false, 60);
+      else await fail("outbox", job, job.kind === "message");
     }
   }
 }
@@ -92,11 +100,12 @@ async function dispatchMessage(job: Job) {
       bot_paused: boolean;
       bot_epoch: number;
       phone: string;
+      instance_id: string;
       instance_name: string;
       status: string;
     }>(
       db,
-      "select c.bot_paused,c.bot_epoch,u.phone,w.instance_name,w.status from public.conversations c join public.customers u on u.tenant_id=c.tenant_id and u.id=c.customer_id join public.whatsapp_instances w on w.tenant_id=c.tenant_id and w.id=c.instance_id where c.tenant_id=$1 and c.id=$2",
+      "select c.bot_paused,c.bot_epoch,u.phone,w.id instance_id,w.instance_name,w.status from public.conversations c join public.customers u on u.tenant_id=c.tenant_id and u.id=c.customer_id join public.whatsapp_instances w on w.tenant_id=c.tenant_id and w.id=c.instance_id where c.tenant_id=$1 and c.id=$2",
       [job.tenant_id, input.conversationId],
     );
     if (
@@ -144,7 +153,20 @@ async function dispatchMessage(job: Job) {
   });
   if (!target) return;
   try {
-    invariant(target.status === "connected", "WhatsApp desconectado.");
+    let status = target.status;
+    if (status !== "connected")
+      status =
+        (await syncWhatsAppInstance(
+          job.tenant_id,
+          target.instance_id,
+          target.instance_name,
+        )) || status;
+    if (status !== "connected")
+      throw new AppError(
+        503,
+        "WhatsApp desconectado.",
+        "whatsapp_disconnected",
+      );
     let externalId: string;
     if (input.media) {
       const { data, error } = await privateFiles()
@@ -205,7 +227,53 @@ async function dispatchMessage(job: Job) {
         [job.tenant_id, job.id],
       ),
     );
-    throw error;
+    if (
+      error instanceof AppError &&
+      error.code === "whatsapp_disconnected"
+    )
+      throw error;
+    const liveStatus = await syncWhatsAppInstance(
+      job.tenant_id,
+      target.instance_id,
+      target.instance_name,
+      true,
+    );
+    throw new AppError(
+      503,
+      error instanceof Error ? error.message : "Falha ao enviar mensagem.",
+      liveStatus === "connected"
+        ? "whatsapp_send_retry"
+        : "whatsapp_disconnected",
+    );
+  }
+}
+
+async function syncWhatsAppInstance(
+  tenantId: string,
+  instanceId: string,
+  instanceName: string,
+  repairWebhook = false,
+) {
+  try {
+    const status = await getConnection(instanceName);
+    let webhookConfigured = false;
+    if (status === "connected" && repairWebhook) {
+      await configureWebhook(instanceName);
+      webhookConfigured = true;
+    }
+    await transaction((db) =>
+      db.query(
+        `update public.whatsapp_instances
+         set status=$3,last_status_check_at=now(),
+             connected_at=case when $3='connected' then coalesce(connected_at,now()) else connected_at end,
+             webhook_configured_at=case when $4 then now() else webhook_configured_at end
+         where tenant_id=$1 and id=$2`,
+        [tenantId, instanceId, status, webhookConfigured],
+      ),
+    );
+    return status;
+  } catch {
+    return null;
   }
 }
 const evolutionPayload = z.object({
@@ -255,6 +323,16 @@ async function processEvolution(job: Job) {
         : data.state === "connecting"
           ? "connecting"
           : "disconnected";
+    let webhookConfigured = false;
+    if (status === "connected") {
+      try {
+        await configureWebhook(instance.instance_name);
+        webhookConfigured = true;
+      } catch {
+        // A chegada deste evento confirma que o webhook atual funciona.
+        // Uma próxima sincronização tentará configurá-lo novamente.
+      }
+    }
     await transaction(async (db) => {
       const old = await one<{ status: string }>(
         db,
@@ -262,9 +340,30 @@ async function processEvolution(job: Job) {
         [tenant, instance.id],
       );
       await db.query(
-        "update public.whatsapp_instances set status=$3,last_status_check_at=now(),connected_at=case when $3='connected' then now() else connected_at end where tenant_id=$1 and id=$2",
-        [tenant, instance.id, status],
+        `update public.whatsapp_instances
+         set status=$3,last_status_check_at=now(),
+             connected_at=case when $3='connected' then now() else connected_at end,
+             webhook_configured_at=case when $4 then now() else webhook_configured_at end
+         where tenant_id=$1 and id=$2`,
+        [tenant, instance.id, status, webhookConfigured],
       );
+      if (status === "connected")
+        await db.query(
+          `update private.outbox q
+           set status='pending',attempts=0,available_at=now(),locked_at=null
+           where q.tenant_id=$1 and q.kind='message'
+             and q.status in ('pending','failed')
+             and q.created_at>now()-interval '10 minutes'
+             and not exists (
+               select 1 from public.conversation_messages m
+               where m.tenant_id=q.tenant_id
+                 and m.conversation_id=nullif(q.payload->>'conversationId','')::uuid
+                 and m.direction='outbound'
+                 and m.status in ('sent','delivered','read')
+                 and m.created_at>q.created_at
+             )`,
+          [tenant],
+        );
       if (old?.status !== status)
         await notify(
           db,
@@ -327,6 +426,12 @@ async function processEvolution(job: Job) {
     })
     .parse(payload.data);
   if (!data.key.remoteJid.endsWith("@s.whatsapp.net")) return;
+  await transaction((db) =>
+    db.query(
+      "update public.whatsapp_instances set status='connected',last_status_check_at=now(),connected_at=coalesce(connected_at,now()) where tenant_id=$1 and id=$2",
+      [tenant, instance.id],
+    ),
+  );
   const phone = normalizePhone(data.key.remoteJid.split("@")[0]);
   const body = extractWhatsAppMessageText(data.message);
   const record = await transaction(async (db) => {
