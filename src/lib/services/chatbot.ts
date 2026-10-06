@@ -54,6 +54,13 @@ function isChoice(input: string, ...choices: string[]) {
   return choices.some((choice) => normalizeText(choice) === input);
 }
 
+function joinBlocks(...blocks: Array<string | null | undefined | false>) {
+  return blocks
+    .filter((block): block is string => typeof block === "string" && !!block)
+    .map((block) => block.trim())
+    .join("\n\n");
+}
+
 const prompts: Record<string, string> = {
   main_menu: "1️⃣ Fazer pedido\n2️⃣ Ver cardápio\n3️⃣ Acompanhar pedido",
   awaiting_name:
@@ -65,33 +72,33 @@ const prompts: Record<string, string> = {
   awaiting_street: "Qual é o nome da rua?",
   awaiting_neighborhood: "Qual é o bairro?",
   awaiting_complement:
-    "Informe complemento ou referência. Digite 0️⃣ para continuar sem complemento.",
+    "Informe um complemento ou uma referência.\n\nDigite 0️⃣ para continuar sem complemento.",
   awaiting_saved_address:
     "Escolha um endereço salvo ou digite 0️⃣ para usar outro:",
   awaiting_address_confirmation:
-    "Confirme o endereço e a taxa:\n1️⃣ Confirmar\n2️⃣ Corrigir CEP",
+    "Confirme o endereço e a taxa:\n\n1️⃣ Confirmar\n2️⃣ Corrigir CEP",
   delivery_out_of_range:
-    "Como deseja continuar?\n1️⃣ Retirar na pizzaria\n2️⃣ Voltar ao menu",
+    "Como deseja continuar?\n\n1️⃣ Retirar na pizzaria\n2️⃣ Voltar ao menu",
   awaiting_category: "Escolha uma categoria:",
   browsing_category: "*Escolha uma categoria para ver o cardápio:*",
   awaiting_product: "Escolha um produto:",
   awaiting_size: "Escolha o tamanho:",
-  awaiting_split: "Deseja dois sabores?\n1️⃣ Sim\n2️⃣ Apenas este sabor",
+  awaiting_split: "Deseja dois sabores?\n\n1️⃣ Sim\n2️⃣ Apenas este sabor",
   awaiting_second_category: "Escolha a categoria do segundo sabor:",
   awaiting_second_flavor: "Escolha o segundo sabor para o mesmo tamanho:",
-  awaiting_border:
-    "Escolha uma borda ou digite 0️⃣ para continuar sem borda:",
+  awaiting_border: "Escolha uma borda:\n\nDigite 0️⃣ para continuar sem borda.",
   awaiting_observation:
-    "Alguma observação? Digite 0️⃣ para continuar sem observação.",
+    "Alguma observação?\n\nDigite 0️⃣ para continuar sem observação.",
   cart_menu:
-    "1️⃣ Adicionar mais itens\n2️⃣ Finalizar\n3️⃣ Aplicar cupom\n4️⃣ Remover item",
+    "Como deseja continuar?\n\n1️⃣ Adicionar mais itens\n2️⃣ Finalizar\n3️⃣ Aplicar cupom\n4️⃣ Remover item",
   awaiting_remove: "Digite o número ou o nome do item para remover.",
-  awaiting_coupon: "Digite o código do cupom ou 0️⃣ para remover o cupom.",
+  awaiting_coupon:
+    "Digite o código do cupom.\n\nDigite 0️⃣ para remover o cupom.",
   awaiting_payment: "Escolha a forma de pagamento:",
   awaiting_change:
-    "Precisa de troco? Informe o valor (ex.: 100,00) ou 0️⃣ para não precisar.",
+    "Precisa de troco?\n\nInforme o valor (ex.: 100,00) ou digite 0️⃣ para continuar sem troco.",
   awaiting_final_confirmation:
-    "1️⃣ CONFIRMAR PEDIDO\n2️⃣ Voltar ao carrinho",
+    "Confirme seu pedido:\n\n1️⃣ CONFIRMAR PEDIDO\n2️⃣ Voltar ao carrinho",
 };
 
 function mainMenu(store?: { display_name: string; welcome_message: string }) {
@@ -132,18 +139,21 @@ function mainMenu(store?: { display_name: string; welcome_message: string }) {
 }
 async function cartSummary(db: DB, tenant: string, cart: string) {
   const q = await priceCart(db, tenant, cart);
+  const items = q.items.map(
+    (item, index) =>
+      `${keycapNumber(index + 1)} ${item.quantity}x ${item.size_name_snapshot || ""} ${item.name_snapshot}${item.border_name_snapshot ? " · Borda " + item.border_name_snapshot : ""}${item.observation ? "\nObs.: " + item.observation : ""} — ${formatCurrency(item.unit_price_cents * item.quantity)}`,
+  );
   return {
     quote: q,
-    text: [
-      ...q.items.map(
-        (i, n) =>
-          `${keycapNumber(n + 1)} ${i.quantity}x ${i.size_name_snapshot || ""} ${i.name_snapshot}${i.border_name_snapshot ? " · Borda " + i.border_name_snapshot : ""}${i.observation ? "\nObs.: " + i.observation : ""} — ${formatCurrency(i.unit_price_cents * i.quantity)}`,
-      ),
-      `Subtotal: ${formatCurrency(q.subtotal_cents)}`,
-      `Desconto: ${formatCurrency(q.discount_cents)}`,
-      `Entrega: ${formatCurrency(q.delivery_fee_cents)}`,
-      `Total: ${formatCurrency(q.total_cents)}`,
-    ].join("\n"),
+    text: joinBlocks(
+      items.join("\n\n"),
+      [
+        `Subtotal: ${formatCurrency(q.subtotal_cents)}`,
+        `Desconto: ${formatCurrency(q.discount_cents)}`,
+        `Entrega: ${formatCurrency(q.delivery_fee_cents)}`,
+        `Total: ${formatCurrency(q.total_cents)}`,
+      ].join("\n"),
+    ),
   };
 }
 export async function processBotMessage(
@@ -169,11 +179,12 @@ export async function processBotMessage(
   try {
     if (initial.current_step === "awaiting_saved_address") {
       const numeric = Number(normalized);
-      const choice = Number.isInteger(numeric) && numeric > 0
-        ? initial.context.options?.[numeric - 1]
-        : initial.context.options?.find(
-            (option) => normalizeText(option.name) === normalized,
-          );
+      const choice =
+        Number.isInteger(numeric) && numeric > 0
+          ? initial.context.options?.[numeric - 1]
+          : initial.context.options?.find(
+              (option) => normalizeText(option.name) === normalized,
+            );
       if (choice) {
         const address = await transaction((db) =>
           one(
@@ -360,7 +371,7 @@ export async function processBotMessage(
           .map((o, i) => `${keycapNumber(i + 1)} ${o.name}`)
           .join("\n") +
         (["size", "payment"].includes(kind) && context.options.length === 8
-          ? "\nDigite MAIS para ver outras opções."
+          ? "\n\nDigite MAIS para ver outras opções."
           : "")
       );
     }
@@ -432,16 +443,17 @@ export async function processBotMessage(
       );
       context.options = addresses;
       step = addresses.length ? "awaiting_saved_address" : "awaiting_cep";
-      reply =
-        prompts[step] +
-        (addresses.length
-          ? "\n" +
-            addresses
-              .map((address, index) =>
-                `${keycapNumber(index + 1)} ${address.name}`,
+      reply = joinBlocks(
+        prompts[step],
+        addresses.length
+          ? addresses
+              .map(
+                (address, index) =>
+                  `${keycapNumber(index + 1)} ${address.name}`,
               )
               .join("\n")
-          : "");
+          : undefined,
+      );
     }
     async function continueAfterAddress() {
       const cart = await one<{ has_items: boolean }>(
@@ -452,10 +464,10 @@ export async function processBotMessage(
       context.page = 0;
       if (cart?.has_items) {
         step = "awaiting_payment";
-        reply = prompts[step] + "\n" + (await options("payment"));
+        reply = joinBlocks(prompts[step], await options("payment"));
       } else {
         step = "awaiting_category";
-        reply = prompts[step] + "\n" + (await options("category"));
+        reply = joinBlocks(prompts[step], await options("category"));
       }
     }
     if (
@@ -490,7 +502,7 @@ export async function processBotMessage(
         );
       c.context = {};
       step = "main_menu";
-      reply = "Rascunho cancelado.\n" + prompts.main_menu;
+      reply = joinBlocks("Rascunho cancelado.", prompts.main_menu);
     } else if (normalized === "menu") {
       step = "main_menu";
       reply = menu.text;
@@ -501,12 +513,12 @@ export async function processBotMessage(
         context.quoteHash = undefined;
         if (store?.pickup_enabled) {
           step = "delivery_out_of_range";
-          reply = deliveryOutOfRangeMessage + "\n\n" + prompts[step];
+          reply = joinBlocks(deliveryOutOfRangeMessage, prompts[step]);
         } else {
           step = "main_menu";
           reply = deliveryOutOfRangeMessage + "\n\n" + menu.text;
         }
-      } else reply = externalError + "\n" + (prompts[step] || "");
+      } else reply = joinBlocks(externalError, prompts[step]);
     } else if (text.includes("?") || interpretation?.intent === "question") {
       const query = (interpretation?.query || text.replace(/[?!]/g, "")).slice(
         0,
@@ -523,16 +535,12 @@ export async function processBotMessage(
               (x) =>
                 `${x.name}: ${x.description || "Não há informações de ingredientes no cardápio."}`,
             )
-            .join("\n")
+            .join("\n\n")
         : "Não encontrei essa informação no cardápio. Digite ATENDENTE para falar com a equipe.";
       reply += "\n\n" + (prompts[step] || prompts.main_menu);
     } else if (
       normalized === "mais" &&
-      [
-        "awaiting_size",
-        "awaiting_border",
-        "awaiting_payment",
-      ].includes(step)
+      ["awaiting_size", "awaiting_border", "awaiting_payment"].includes(step)
     ) {
       context.page = (context.page || 0) + 1;
       const kind = (
@@ -545,12 +553,12 @@ export async function processBotMessage(
       const list = await options(kind);
       if (!context.options?.length) {
         context.page = 0;
-        reply = "Fim da lista.\n" + (await options(kind));
-      } else reply = prompts[step] + "\n" + list;
+        reply = joinBlocks("Fim da lista.", await options(kind));
+      } else reply = joinBlocks(prompts[step], list);
     } else if (normalized === "carrinho" && context.cartId) {
       const summary = await cartSummary(db, tenant, context.cartId);
       step = "cart_menu";
-      reply = summary.text + "\n\n" + prompts.cart_menu;
+      reply = joinBlocks(summary.text, prompts.cart_menu);
     } else if (normalized === "voltar") {
       step = context.previousStep || "main_menu";
       context.page = 0;
@@ -569,11 +577,10 @@ export async function processBotMessage(
           ? await secondFlavorCatalog(
               "Responda com o número ou o nome do segundo sabor.",
             )
-          : (prompts[step] || prompts.main_menu) +
-            (previousKind
-              ? (step === "browsing_category" ? "\n\n" : "\n") +
-                (await options(previousKind))
-              : "");
+          : joinBlocks(
+              prompts[step] || prompts.main_menu,
+              previousKind ? await options(previousKind) : undefined,
+            );
     } else
       switch (step) {
         case "main_menu":
@@ -592,7 +599,7 @@ export async function processBotMessage(
           } else if (mainMenuOption(normalized) === "2") {
             step = "browsing_category";
             context.page = 0;
-            reply = prompts[step] + "\n\n" + (await options("category"));
+            reply = joinBlocks(prompts[step], await options("category"));
           } else if (mainMenuOption(normalized) === "1") {
             if (!isOpen) {
               reply =
@@ -612,7 +619,7 @@ export async function processBotMessage(
               context.address = undefined;
               step = "awaiting_category";
               context.page = 0;
-              reply = prompts[step] + "\n" + (await options("category"));
+              reply = joinBlocks(prompts[step], await options("category"));
             }
           } else {
             reply = menu.text;
@@ -638,7 +645,7 @@ export async function processBotMessage(
           context.address = undefined;
           step = "awaiting_category";
           context.page = 0;
-          reply = prompts[step] + "\n" + (await options("category"));
+          reply = joinBlocks(prompts[step], await options("category"));
           break;
         case "delivery_out_of_range":
           if (
@@ -668,20 +675,13 @@ export async function processBotMessage(
           break;
         case "awaiting_service":
           const deliveryChoice = isChoice(normalized, "1", "entrega");
-          const pickupChoice = isChoice(
-            normalized,
-            "2",
-            "retirada",
-            "retirar",
-          );
+          const pickupChoice = isChoice(normalized, "2", "retirada", "retirar");
           if (!deliveryChoice && !pickupChoice) {
             reply = prompts[step];
             break;
           }
           invariant(
-            deliveryChoice
-              ? store?.delivery_enabled
-              : store?.pickup_enabled,
+            deliveryChoice ? store?.delivery_enabled : store?.pickup_enabled,
             "Esta modalidade está indisponível.",
           );
           context.cartId = await ensureCart(
@@ -700,19 +700,13 @@ export async function processBotMessage(
           if (!cartItems?.has_items) {
             step = "awaiting_category";
             context.page = 0;
-            reply = prompts[step] + "\n" + (await options("category"));
+            reply = joinBlocks(prompts[step], await options("category"));
           } else if (deliveryChoice) await requestDeliveryAddress();
           else await continueAfterAddress();
           break;
         case "awaiting_saved_address":
           if (
-            isChoice(
-              normalized,
-              "0",
-              "outro",
-              "usar outro",
-              "outro endereço",
-            )
+            isChoice(normalized, "0", "outro", "usar outro", "outro endereço")
           ) {
             step = "awaiting_cep";
             reply = prompts[step];
@@ -741,10 +735,11 @@ export async function processBotMessage(
             ],
           );
           step = "awaiting_address_confirmation";
-          reply =
-            formatAddress(savedAddress) +
-            `\nTaxa: ${formatCurrency(delivery.fee_cents)}\n` +
-            prompts[step];
+          reply = joinBlocks(
+            formatAddress(savedAddress),
+            `Taxa: ${formatCurrency(delivery.fee_cents)}`,
+            prompts[step],
+          );
           break;
         case "awaiting_cep":
           if (!cep) {
@@ -764,7 +759,12 @@ export async function processBotMessage(
             : !cep.bairro
               ? "awaiting_neighborhood"
               : "awaiting_number";
-          reply = `${[cep.logradouro, cep.bairro, cep.localidade, cep.uf].filter(Boolean).join(" - ")}\n${prompts[step]}`;
+          reply = joinBlocks(
+            [cep.logradouro, cep.bairro, cep.localidade, cep.uf]
+              .filter(Boolean)
+              .join(" - "),
+            prompts[step],
+          );
           break;
         case "awaiting_street":
           invariant(
@@ -811,8 +811,10 @@ export async function processBotMessage(
             ],
           );
           step = "awaiting_complement";
-          reply =
-            `Taxa: ${formatCurrency(delivery.fee_cents)}\n` + prompts[step];
+          reply = joinBlocks(
+            `Taxa: ${formatCurrency(delivery.fee_cents)}`,
+            prompts[step],
+          );
           break;
         case "awaiting_complement":
           invariant(text.length <= 100, "Use até 100 caracteres.");
@@ -833,8 +835,7 @@ export async function processBotMessage(
             [tenant, context.cartId, JSON.stringify(context.address)],
           );
           step = "awaiting_address_confirmation";
-          reply =
-            formatAddress(context.address) + "\n" + prompts[step];
+          reply = joinBlocks(formatAddress(context.address), prompts[step]);
           break;
         case "awaiting_address_confirmation":
           if (
@@ -876,7 +877,7 @@ export async function processBotMessage(
           break;
         case "awaiting_category":
           if (!selected()) {
-            reply = prompts[step] + "\n" + (await options("category"));
+            reply = joinBlocks(prompts[step], await options("category"));
             break;
           }
           context.categoryId = selected()!.id;
@@ -899,7 +900,7 @@ export async function processBotMessage(
           break;
         case "browsing_category":
           if (!selected()) {
-            reply = prompts[step] + "\n\n" + (await options("category"));
+            reply = joinBlocks(prompts[step], await options("category"));
             break;
           }
           context.categoryId = selected()!.id;
@@ -925,10 +926,10 @@ export async function processBotMessage(
           const sizes = await options("size");
           if (context.options?.length) {
             step = "awaiting_size";
-            reply = prompts[step] + "\n" + sizes;
+            reply = joinBlocks(prompts[step], sizes);
           } else {
             step = "awaiting_border";
-            reply = prompts[step] + "\n" + (await options("border"));
+            reply = joinBlocks(prompts[step], await options("border"));
           }
           break;
         case "awaiting_size":
@@ -951,7 +952,7 @@ export async function processBotMessage(
           } else {
             step = "awaiting_border";
             context.page = 0;
-            reply = prompts[step] + "\n" + (await options("border"));
+            reply = joinBlocks(prompts[step], await options("border"));
           }
           break;
         case "awaiting_split":
@@ -966,24 +967,18 @@ export async function processBotMessage(
           ) {
             step = "awaiting_second_category";
             context.page = 0;
-            reply = prompts[step] + "\n" + (await options("second_category"));
+            reply = joinBlocks(prompts[step], await options("second_category"));
           } else if (
-            isChoice(
-              normalized,
-              "2",
-              "não",
-              "apenas este sabor",
-              "um sabor",
-            )
+            isChoice(normalized, "2", "não", "apenas este sabor", "um sabor")
           ) {
             step = "awaiting_border";
             context.page = 0;
-            reply = prompts[step] + "\n" + (await options("border"));
+            reply = joinBlocks(prompts[step], await options("border"));
           } else reply = prompts[step];
           break;
         case "awaiting_second_category":
           if (!selected()) {
-            reply = prompts[step] + "\n" + (await options("second_category"));
+            reply = joinBlocks(prompts[step], await options("second_category"));
             break;
           }
           context.secondCategoryId = selected()!.id;
@@ -1007,7 +1002,7 @@ export async function processBotMessage(
           context.productIds = [context.productIds![0], selected()!.id];
           step = "awaiting_border";
           context.page = 0;
-          reply = prompts[step] + "\n" + (await options("border"));
+          reply = joinBlocks(prompts[step], await options("border"));
           break;
         case "awaiting_border":
           const withoutBorder = isChoice(
@@ -1019,7 +1014,7 @@ export async function processBotMessage(
           );
           if (!withoutBorder && !selected()) {
             context.page = 0;
-            reply = prompts[step] + "\n" + (await options("border"));
+            reply = joinBlocks(prompts[step], await options("border"));
             break;
           }
           context.borderId = withoutBorder ? null : selected()!.id;
@@ -1054,20 +1049,15 @@ export async function processBotMessage(
           );
           const summary = await cartSummary(db, tenant, context.cartId);
           step = "cart_menu";
-          reply = summary.text + "\n\n" + prompts[step];
+          reply = joinBlocks(summary.text, prompts[step]);
           break;
         case "cart_menu":
           if (
-            isChoice(
-              normalized,
-              "1",
-              "adicionar mais itens",
-              "adicionar item",
-            )
+            isChoice(normalized, "1", "adicionar mais itens", "adicionar item")
           ) {
             step = "awaiting_category";
             context.page = 0;
-            reply = prompts[step] + "\n" + (await options("category"));
+            reply = joinBlocks(prompts[step], await options("category"));
           } else if (
             isChoice(normalized, "2", "finalizar", "finalizar pedido")
           ) {
@@ -1101,9 +1091,10 @@ export async function processBotMessage(
             [tenant, itemToRemove.id],
           );
           step = items.length > 1 ? "cart_menu" : "awaiting_category";
-          reply =
-            prompts[step] +
-            (items.length === 1 ? "\n" + (await options("category")) : "");
+          reply = joinBlocks(
+            prompts[step],
+            items.length === 1 ? await options("category") : undefined,
+          );
           break;
         case "awaiting_coupon":
           await db.query(
@@ -1124,7 +1115,7 @@ export async function processBotMessage(
           );
           const couponSummary = await cartSummary(db, tenant, context.cartId!);
           step = "cart_menu";
-          reply = couponSummary.text + "\n" + prompts[step];
+          reply = joinBlocks(couponSummary.text, prompts[step]);
           break;
         case "awaiting_payment":
           if (!selected()) {
@@ -1151,16 +1142,14 @@ export async function processBotMessage(
             const final = await cartSummary(db, tenant, context.cartId!);
             context.quoteHash = final.quote.hash;
             step = "awaiting_final_confirmation";
-            reply =
-              final.text +
-              "\nPagamento: " +
-              method.name +
-              "\n" +
-              (context.address
+            reply = joinBlocks(
+              final.text,
+              `Pagamento: ${method.name}`,
+              context.address
                 ? `Endereço: ${formatAddress(context.address)}`
-                : "Retirada no local") +
-              "\n\n" +
-              prompts[step];
+                : "Retirada no local",
+              prompts[step],
+            );
           }
           break;
         case "awaiting_email":
@@ -1175,14 +1164,14 @@ export async function processBotMessage(
           const emailQuote = await cartSummary(db, tenant, context.cartId!);
           context.quoteHash = emailQuote.quote.hash;
           step = "awaiting_final_confirmation";
-          reply =
-            emailQuote.text +
-            "\nPagamento: PIX Mercado Pago\n" +
-            (context.address
+          reply = joinBlocks(
+            emailQuote.text,
+            "Pagamento: PIX Mercado Pago",
+            context.address
               ? `Endereço: ${formatAddress(context.address)}`
-              : "Retirada no local") +
-            "\n" +
-            prompts[step];
+              : "Retirada no local",
+            prompts[step],
+          );
           break;
         case "awaiting_change":
           const change = isChoice(
@@ -1205,18 +1194,17 @@ export async function processBotMessage(
           );
           context.quoteHash = changeQuote.quote.hash;
           step = "awaiting_final_confirmation";
-          reply =
-            changeQuote.text +
-            "\nPagamento: Dinheiro" +
-            (change
-              ? " · Troco para " + formatCurrency(change)
-              : " · Sem troco") +
-            "\n" +
-            (context.address
+          reply = joinBlocks(
+            changeQuote.text,
+            "Pagamento: Dinheiro" +
+              (change
+                ? " · Troco para " + formatCurrency(change)
+                : " · Sem troco"),
+            context.address
               ? `Endereço: ${formatAddress(context.address)}`
-              : "Retirada no local") +
-            "\n\n" +
-            prompts[step];
+              : "Retirada no local",
+            prompts[step],
+          );
           break;
         case "awaiting_final_confirmation":
           if (
@@ -1246,11 +1234,11 @@ export async function processBotMessage(
             const current = await cartSummary(db, tenant, context.cartId!);
             if (current.quote.hash !== context.quoteHash) {
               context.quoteHash = current.quote.hash;
-              reply =
-                "Os valores foram atualizados. Confira antes de confirmar:\n" +
-                current.text +
-                "\n" +
-                prompts[step];
+              reply = joinBlocks(
+                "Os valores foram atualizados. Confira antes de confirmar:",
+                current.text,
+                prompts[step],
+              );
               break;
             }
             const order = await finalizeCart(
@@ -1259,17 +1247,18 @@ export async function processBotMessage(
               context.cartId!,
               context.quoteHash!,
             );
-            reply = `Pedido #${order.order_number} recebido! 🍕\nAguardando confirmação da pizzaria. Avisaremos quando for aceito.`;
+            reply = `Pedido #${order.order_number} recebido! 🍕\n\nAguardando confirmação da pizzaria. Avisaremos quando for aceito.`;
             if (order.payment_method_type === "pix_manual") {
               const pix = await one<{ pix_key: string }>(
                 db,
                 "select pix_key from public.payment_methods where tenant_id=$1 and id=(select payment_method_id from public.orders where tenant_id=$1 and id=$2)",
                 [tenant, order.id],
               );
-              reply +=
-                "\nChave PIX: " +
-                pix?.pix_key +
-                "\nA equipe confirmará o recebimento.";
+              reply = joinBlocks(
+                reply,
+                `Chave PIX: ${pix?.pix_key}`,
+                "A equipe confirmará o recebimento.",
+              );
             }
             step = "main_menu";
             c.context = {};
