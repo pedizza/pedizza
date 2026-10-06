@@ -2,7 +2,10 @@ import "server-only";
 import { z } from "zod";
 import { transaction, one, rows, type DB } from "@/lib/db";
 import { invariant, AppError } from "@/lib/errors";
-import { normalizeText } from "@/lib/domain/normalization";
+import {
+  normalizeSingularChoice,
+  normalizeText,
+} from "@/lib/domain/normalization";
 import {
   calculateChange,
   formatChatCurrency,
@@ -92,6 +95,19 @@ function namedMessage(name: string | undefined, message: string) {
 
 function shouldInterpretMessage(step: string, text: string) {
   if (!text.trim() || /^\d+$/.test(normalizeText(text))) return false;
+  const normalized = normalizeText(text);
+  if (
+    [
+      "awaiting_category",
+      "browsing_category",
+      "awaiting_second_category",
+    ].includes(step) &&
+    normalized.split(" ").length <= 4 &&
+    !/\b(quero|gostaria|pedido|pedir|meia|meio|borda|entrega|retirada)\b/.test(
+      normalized,
+    )
+  )
+    return false;
   const naturalLanguageIntent =
     /\b(quero|pedido|pedir|pizza|meia|meio|sabor|borda|entrega|retirada|status|tempo|demora|pronto|endere[cç]o|hor[aá]rio|pagamento|pagar|rob[oô]|intelig[eê]ncia|ia|atendente|humano|obrigad[oa]|oi|ol[aá])\b/i.test(
       text,
@@ -664,8 +680,21 @@ export async function processBotMessage(
       const numeric = Number(normalized);
       if (Number.isInteger(numeric) && numeric > 0)
         return context.options?.[numeric - 1];
-      return context.options?.find(
+      const exact = context.options?.find(
         (option) => normalizeText(option.name) === normalized,
+      );
+      if (exact) return exact;
+      if (
+        ![
+          "awaiting_category",
+          "browsing_category",
+          "awaiting_second_category",
+        ].includes(step)
+      )
+        return undefined;
+      const singularInput = normalizeSingularChoice(normalized);
+      return context.options?.find(
+        (option) => normalizeSingularChoice(option.name) === singularInput,
       );
     };
     async function requestDeliveryAddress() {

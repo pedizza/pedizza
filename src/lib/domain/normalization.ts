@@ -7,6 +7,15 @@ export const normalizeText = (s: string) =>
     .trim()
     .toLowerCase()
     .replace(/\s+/g, " ");
+
+export function normalizeSingularChoice(value: string) {
+  return normalizeText(value)
+    .split(" ")
+    .map((word) =>
+      word.length > 3 && word.endsWith("s") ? word.slice(0, -1) : word,
+    )
+    .join(" ");
+}
 export function normalizePhone(s: string) {
   let n = s.replace(/\D/g, "");
   if (n.length === 10 || n.length === 11) n = "55" + n;

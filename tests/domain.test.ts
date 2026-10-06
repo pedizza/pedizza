@@ -12,7 +12,11 @@ import {
   validateHours,
 } from "@/lib/domain/hours";
 import { canConfirmManually, canTransition } from "@/lib/domain/orders";
-import { normalizePhone, validDocument } from "@/lib/domain/normalization";
+import {
+  normalizePhone,
+  normalizeSingularChoice,
+  validDocument,
+} from "@/lib/domain/normalization";
 import {
   extractWhatsAppMessageText,
   keycapNumber,
@@ -99,6 +103,26 @@ describe("domain invariants", () => {
     expect(normalizePhone("(11) 99999-9999")).toBe("5511999999999");
     expect(validDocument("11.222.333/0001-81", 14)).toBe(true);
     expect(validDocument("11111111111", 11)).toBe(false);
+  });
+  it("accepts category names in singular or plural", () => {
+    expect(normalizeSingularChoice("Pizzas Salgadas")).toBe(
+      normalizeSingularChoice("pizza salgada"),
+    );
+    expect(normalizeSingularChoice("Brotos Gourmet")).toBe(
+      normalizeSingularChoice("broto gourmet"),
+    );
+    expect(normalizeSingularChoice("Esfihas")).toBe(
+      normalizeSingularChoice("esfiha"),
+    );
+    expect(normalizeSingularChoice("Calzones")).toBe(
+      normalizeSingularChoice("calzone"),
+    );
+    expect(normalizeSingularChoice("Beirutes")).toBe(
+      normalizeSingularChoice("beirute"),
+    );
+    expect(normalizeSingularChoice("Bebidas")).toBe(
+      normalizeSingularChoice("bebida"),
+    );
   });
   it("extracts WhatsApp list selections as chatbot commands", () => {
     expect(
