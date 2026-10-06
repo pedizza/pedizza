@@ -49,7 +49,8 @@ type Conversation = {
 };
 const prompts: Record<string, string> = {
   main_menu: "1️⃣ Fazer pedido\n2️⃣ Ver cardápio\n3️⃣ Acompanhar pedido",
-  awaiting_name: "Como você se chama?",
+  awaiting_name:
+    "Perfeito, vamos começar a anotar seu pedido! 🍕\n\nQual seu nome, por gentileza? 😊",
   awaiting_service: "Como deseja receber?\n1️⃣ Entrega\n2️⃣ Retirada",
   awaiting_cep: "Informe seu CEP (8 números).",
   awaiting_number: "Qual é o número do endereço?",
