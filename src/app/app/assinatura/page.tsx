@@ -27,7 +27,7 @@ export default async function Page() {
       <Billing
         lifetime={!!s?.lifetime_access}
         status={s?.status || "pending"}
-        price={s?.price_cents || 4700}
+        price={s?.price_cents || 8990}
         period={s?.current_period_end?.toISOString() || null}
         canManage={ctx.permissions.includes("subscription.manage")}
         configured={

@@ -67,7 +67,7 @@ export function AuthForm({
           <h1>{title}</h1>
           <p className="muted">
             {mode === "signup"
-              ? "Crie sua conta e conheça o plano Pedizza por R$ 47/mês."
+              ? "Crie sua conta e conheça o plano Pedizza por R$ 89,90/mês."
               : "Acesse sua conta para cuidar da sua operação."}
           </p>
           <form action={submit}>

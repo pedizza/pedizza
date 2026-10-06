@@ -39,7 +39,7 @@ export default function Home() {
             <Link className="btn" href="/cadastro">
               Começar com o Pedizza <ArrowRight size={18} />
             </Link>
-            <span className="muted">R$ 47 por mês</span>
+            <span className="muted">R$ 89,90 por mês</span>
           </div>
           <div className="hero-note">
             <ShieldCheck size={17} /> Cada loja com seu próprio espaço.

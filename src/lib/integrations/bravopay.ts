@@ -57,7 +57,7 @@ export async function createBillingCharge(ctx: TenantContext) {
       [ctx.tenantId],
     );
     invariant(s, "Plano não encontrado.");
-    const existing = await one<{
+    let existing = await one<{
       id: string;
       idempotency_key: string;
       provider_id: string | null;
@@ -68,6 +68,13 @@ export async function createBillingCharge(ctx: TenantContext) {
       "select id,idempotency_key,provider_id,amount_cents,subscription_id from private.billing_charges where tenant_id=$1 and status in ('pending','creating') order by created_at desc limit 1",
       [ctx.tenantId],
     );
+    if (existing && existing.amount_cents !== s.price_cents) {
+      await db.query(
+        "update private.billing_charges set status='expired' where id=$1",
+        [existing.id],
+      );
+      existing = undefined;
+    }
     if (existing) return existing;
     return (await one<{
       id: string;

@@ -32,7 +32,7 @@ Conexão OAuth e geração de novos PIX automáticos estão bloqueadas. Métodos
 
 ## BravoPay — assinatura do Pedizza
 
-Preencher `BRAVOPAY_API_KEY`, `BRAVOPAY_WEBHOOK_SECRET` e `BRAVOPAY_PRODUCT_ID`. Plano único de R$ 47/mês, sem trial. Webhook: `/api/webhooks/bravopay`. O callback não libera acesso: somente conciliação autenticada do pagamento confirmado, com referência e valor corretos.
+Preencher `BRAVOPAY_API_KEY`, `BRAVOPAY_WEBHOOK_SECRET` e `BRAVOPAY_PRODUCT_ID`. Plano único de R$ 89,90/mês, sem trial. Webhook: `/api/webhooks/bravopay`. O callback não libera acesso: somente conciliação autenticada do pagamento confirmado, com referência e valor corretos.
 
 A documentação pública verificada oferece criação de transação PIX com parâmetro `subscription` mensal. A cobrança inicial está implementada. **A homologação do ciclo recorrente completo, associação do ID de assinatura e cancelamento pelo painel ainda está pendente.** O OpenAPI publicado apenas resume os endpoints de assinatura/cancelamento, sem contrato completo de resposta. Não foi inventado um contrato. Até a homologação, tratar o cancelamento diretamente no painel BravoPay e refletir a situação pelo fluxo operacional de suporte; não anunciar cancelamento automático pelo Pedizza.
 
