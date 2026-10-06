@@ -69,7 +69,7 @@ const prompts: Record<string, string> = {
   awaiting_product: "Escolha um produto:",
   awaiting_size: "Escolha o tamanho:",
   awaiting_split: "Deseja dois sabores?\n1️⃣ Sim\n2️⃣ Apenas este sabor",
-  awaiting_second_flavor: "Escolha o segundo sabor:",
+  awaiting_second_flavor: "Escolha o segundo sabor para o mesmo tamanho:",
   awaiting_border:
     "Escolha uma borda ou digite 0️⃣ para continuar sem borda:",
   awaiting_quantity: "Qual a quantidade? (1 a 99)",
@@ -309,10 +309,15 @@ export async function processBotMessage(
       if (kind === "category")
         sql =
           "select id,name from public.menu_categories where tenant_id=$1 and active and archived_at is null order by sort_order,id";
-      if (kind === "product" || kind === "second") {
+      if (kind === "product") {
         sql =
           "select id,name from public.menu_items where tenant_id=$1 and category_id=$2 and active and available and archived_at is null order by sort_order,id limit 8 offset $3";
         params.push(context.categoryId);
+      }
+      if (kind === "second") {
+        sql =
+          "select i.id,i.name from public.menu_items i join public.menu_item_prices p on p.tenant_id=i.tenant_id and p.item_id=i.id and p.size_id=$3 and p.active where i.tenant_id=$1 and i.category_id=$2 and i.active and i.available and i.archived_at is null order by i.sort_order,i.id limit 8 offset $4";
+        params.push(context.categoryId, context.sizeId);
       }
       if (kind === "size") {
         sql =
