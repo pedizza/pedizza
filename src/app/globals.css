@@ -817,6 +817,50 @@ small {
 .new-order-alert .btn {
   white-space: nowrap;
 }
+.notifications-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+.danger-text {
+  color: var(--red) !important;
+}
+.notification-preferences {
+  gap: 0;
+}
+.preference-option,
+.preference-push {
+  min-height: 68px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--line);
+}
+.preference-option > span,
+.preference-option strong,
+.preference-option small,
+.preference-push strong,
+.preference-push small {
+  display: block;
+}
+.preference-option small,
+.preference-push small {
+  margin-top: 4px;
+  color: var(--muted);
+}
+.preference-option input {
+  width: 19px;
+  height: 19px;
+  flex: 0 0 auto;
+}
+.preference-push {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
 @keyframes new-order-alert-in {
   from {
     opacity: 0;
@@ -1056,6 +1100,21 @@ small {
   .new-order-alert .btn {
     grid-column: 1 / -1;
     justify-content: center;
+  }
+  .notifications-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .notifications-toolbar > .row,
+  .notifications-toolbar button {
+    width: 100%;
+  }
+  .notifications-toolbar button {
+    justify-content: center;
+  }
+  .preference-push {
+    align-items: stretch;
+    flex-direction: column;
   }
   .desktop-orders-header {
     padding: 9px 14px;

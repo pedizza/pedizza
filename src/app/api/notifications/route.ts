@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { requireTenant, authorize } from "@/lib/auth/context";
 import { transaction, rows, one } from "@/lib/db";
+import { audit } from "@/lib/audit";
 import {
   apiError,
   json,
@@ -152,6 +153,35 @@ export async function POST(request: Request) {
       }
     });
     return json({ ok: true });
+  } catch (e) {
+    return apiError(e);
+  }
+}
+
+export async function DELETE(request: Request) {
+  try {
+    verifyOrigin(request);
+    const ctx = await requireTenant("notifications.view");
+    await rateLimit(ctx.userId + ":notifications-delete", 10, 60);
+    const result = await transaction(async (db) => {
+      await authorize(db, ctx, "notifications.view");
+      const deleted = await rows<{ id: string }>(
+        db,
+        "delete from public.notifications where tenant_id=$1 and user_id=$2 returning id",
+        [ctx.tenantId, ctx.userId],
+      );
+      await audit(
+        db,
+        ctx.tenantId,
+        ctx.userId,
+        "notifications.history_deleted",
+        "notifications",
+        null,
+        { count: deleted.length },
+      );
+      return { deleted: deleted.length };
+    });
+    return json(result);
   } catch (e) {
     return apiError(e);
   }
