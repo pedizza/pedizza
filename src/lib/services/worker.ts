@@ -34,7 +34,7 @@ async function claim(table: "outbox" | "webhook_events") {
   return transaction((db) =>
     one<Job>(
       db,
-      `with job as (select id from private.${table} where (status='pending' and available_at<=now() or status='processing' and locked_at<now()-interval '2 minutes') and attempts<5 order by ${priority}created_at for update skip locked limit 1) update private.${table} q set status='processing',attempts=attempts+1,locked_at=now() from job where q.id=job.id returning q.id,q.tenant_id,${table === "outbox" ? "q.kind" : "q.provider as kind"},q.payload,q.attempts`,
+      `with job as (select id from private.${table} where (status='pending' and available_at<=now() or status='processing' and locked_at<now()-interval '2 minutes') and attempts<5 order by ${priority}created_at,event_key for update skip locked limit 1) update private.${table} q set status='processing',attempts=attempts+1,locked_at=now() from job where q.id=job.id returning q.id,q.tenant_id,${table === "outbox" ? "q.kind" : "q.provider as kind"},q.payload,q.attempts`,
     ),
   );
 }

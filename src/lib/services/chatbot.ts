@@ -291,6 +291,7 @@ export async function processBotMessage(
     const context = c.context;
     let step = c.current_step;
     let reply = "";
+    let followUp = "";
     let handoff = false;
     let replyList: WhatsAppList | undefined;
     const hours = await rows<BusinessHour>(
@@ -760,6 +761,14 @@ export async function processBotMessage(
           reply = await categoryCatalog(
             "Responda com o número ou o nome do produto.",
           );
+          const category = await one<{ allow_split: boolean }>(
+            db,
+            "select allow_split from public.menu_categories where tenant_id=$1 and id=$2 and active and archived_at is null",
+            [tenant, context.categoryId],
+          );
+          if (category?.allow_split)
+            followUp =
+              "🍕 *Quer dois sabores?*\n\nEscolha o primeiro sabor agora. Depois de escolher o tamanho, confirme em 1️⃣ Sim que deseja adicionar outro sabor e escolha o segundo. 😋";
           break;
         case "browsing_category":
           if (!selected()) {
@@ -1079,6 +1088,13 @@ export async function processBotMessage(
         sender: handoff ? "system" : "bot",
         text: reply,
         ...(replyList ? { list: replyList } : {}),
+        epoch: c.bot_epoch,
+      });
+    if (followUp)
+      await enqueue(db, tenant, "message", "bot:" + messageId + ":followup", {
+        conversationId: c.id,
+        sender: "bot",
+        text: followUp,
         epoch: c.bot_epoch,
       });
   });
