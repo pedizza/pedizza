@@ -109,14 +109,30 @@ function cartMenuMessage(summary: string) {
   return joinBlocks("Anotei o seu pedido! 📝", summary, prompts.cart_menu);
 }
 
-function mainMenu(store?: { display_name: string; welcome_message: string }) {
+function mainMenu(
+  store?: { display_name: string; welcome_message: string },
+  returningCustomer?: { name: string; has_order: boolean },
+) {
   const storeName = store?.display_name.trim() || "nossa pizzaria";
+  const firstName = returningCustomer?.name
+    .trim()
+    .split(/\s+/)[0]
+    ?.replace(/[*_~`]/g, "");
+  const returningGreeting =
+    returningCustomer?.has_order && firstName
+      ? `Olá! Seja bem-vindo (a) de volta *${firstName}* 🍕`
+      : undefined;
   const greeting =
-    store?.welcome_message.trim() || `Olá! Seja bem-vindo (a) ${storeName} 🍕`;
+    returningGreeting ||
+    store?.welcome_message.trim() ||
+    `Olá! Seja bem-vindo (a) ${storeName} 🍕`;
+  const listTitle = returningGreeting
+    ? `Olá! Seja bem-vindo (a) de volta ${firstName} 🍕`
+    : `Olá! Seja bem-vindo (a) ${storeName} 🍕`;
   return {
     text: `${greeting}\n\nComo podemos ajudar?\n\n${prompts.main_menu}`,
     list: {
-      title: `Olá! Seja bem-vindo (a) ${storeName} 🍕`.slice(0, 60),
+      title: listTitle.slice(0, 60),
       description: "Como podemos ajudar?",
       buttonText: "Escolha aqui",
       footerText: "Selecione uma opção para continuar.",
@@ -265,9 +281,13 @@ export async function processBotMessage(
       "Estado atualizado; tentar novamente.",
       409,
     );
-    const customer = await one<{ name: string; blocked: boolean }>(
+    const customer = await one<{
+      name: string;
+      blocked: boolean;
+      has_order: boolean;
+    }>(
       db,
-      "select name,blocked from public.customers where tenant_id=$1 and id=$2",
+      "select c.name,c.blocked,exists(select 1 from public.orders o where o.tenant_id=c.tenant_id and o.customer_id=c.id) has_order from public.customers c where c.tenant_id=$1 and c.id=$2",
       [tenant, c.customer_id],
     );
     const access = await one<{ active: boolean }>(
@@ -288,7 +308,7 @@ export async function processBotMessage(
       "select display_name,timezone,status_mode,welcome_message,closed_message,delivery_enabled,pickup_enabled from public.store_settings where tenant_id=$1",
       [tenant],
     );
-    const menu = mainMenu(store || undefined);
+    const menu = mainMenu(store || undefined, customer || undefined);
     if (normalized === "reiniciar" && !customer?.blocked && access?.active) {
       await db.query(
         "update public.carts set status='cancelled' where tenant_id=$1 and conversation_id=$2 and status='active'",
