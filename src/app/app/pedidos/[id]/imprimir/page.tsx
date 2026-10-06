@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { requirePage } from "@/lib/auth/context";
 import { transaction, one, rows } from "@/lib/db";
 import { orderColumns, type Order } from "@/lib/services/orders";
-import { formatCurrency } from "@/lib/domain/money";
+import { calculateChange, formatCurrency } from "@/lib/domain/money";
 import { paymentLabels } from "@/lib/domain/orders";
 import { PrintButton } from "@/components/print-button";
 export default async function Page({
@@ -85,8 +85,7 @@ export default async function Page({
                   {item.name_snapshot}
                 </strong>
                 <br />
-                {item.border_name_snapshot &&
-                  `Borda: ${item.border_name_snapshot}`}
+                {item.border_name_snapshot}
                 <br />
                 {settings?.show_observations && item.observation}
                 <br />
@@ -124,6 +123,13 @@ export default async function Page({
                 <>
                   <br />
                   Troco para {formatCurrency(o.change_for_cents)}
+                  <br />
+                  <strong>
+                    Troco a devolver:{" "}
+                    {formatCurrency(
+                      calculateChange(o.change_for_cents, o.total_cents),
+                    )}
+                  </strong>
                 </>
               )}
             </p>

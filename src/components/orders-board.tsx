@@ -9,7 +9,7 @@ import {
   paymentLabels,
   nextOrderStatus,
 } from "@/lib/domain/orders";
-import { formatCurrency } from "@/lib/domain/money";
+import { calculateChange, formatCurrency } from "@/lib/domain/money";
 import { ResponsiveModal } from "./ui/modal";
 import { EmptyState } from "./ui/states";
 import { useRealtime } from "./realtime";
@@ -215,6 +215,16 @@ export function OrdersBoard({
                         {paymentLabels[o.payment_status]}
                       </span>
                     </div>
+                    {o.payment_method_type === "cash" && o.change_for_cents && (
+                      <p style={{ margin: "-8px 0 16px" }}>
+                        Troco a devolver:{" "}
+                        <strong>
+                          {formatCurrency(
+                            calculateChange(o.change_for_cents, o.total_cents),
+                          )}
+                        </strong>
+                      </p>
+                    )}
                     <button
                       className="btn secondary small"
                       style={{ width: "100%" }}
@@ -271,10 +281,7 @@ export function OrdersBoard({
                   <strong>
                     {i.quantity}x {i.size_name_snapshot} {i.name_snapshot}
                   </strong>
-                  <small>
-                    {i.border_name_snapshot &&
-                      "Borda: " + i.border_name_snapshot}
-                  </small>
+                  <small>{i.border_name_snapshot}</small>
                   <small>{i.observation}</small>
                 </div>
                 <strong>
@@ -306,6 +313,24 @@ export function OrdersBoard({
               {detail.order.payment_method_name_snapshot} ·{" "}
               {paymentLabels[detail.order.payment_status]}
             </span>
+            {detail.order.payment_method_type === "cash" &&
+              detail.order.change_for_cents && (
+                <div className="data-row">
+                  <span>
+                    Cliente pagará{" "}
+                    {formatCurrency(detail.order.change_for_cents)}
+                  </span>
+                  <strong>
+                    Troco:{" "}
+                    {formatCurrency(
+                      calculateChange(
+                        detail.order.change_for_cents,
+                        detail.order.total_cents,
+                      ),
+                    )}
+                  </strong>
+                </div>
+              )}
             <div className="row">
               {nextOrderStatus(
                 detail.order.order_status,

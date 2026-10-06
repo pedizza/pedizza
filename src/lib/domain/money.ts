@@ -6,6 +6,9 @@ export const formatCurrency = (cents: number) =>
 
 export const formatChatCurrency = (cents: number) =>
   cents === 0 ? "GRÁTIS 🎁" : formatCurrency(cents);
+
+export const calculateChange = (changeForCents: number, totalCents: number) =>
+  Math.max(0, changeForCents - totalCents);
 export function parseCurrency(value: string) {
   const v = value
     .trim()

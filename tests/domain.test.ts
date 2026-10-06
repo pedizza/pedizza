@@ -4,6 +4,7 @@ import {
   discountAmount,
   parseCurrency,
   formatChatCurrency,
+  calculateChange,
 } from "@/lib/domain/money";
 import {
   getStoreOpenStatus,
@@ -32,6 +33,7 @@ describe("domain invariants", () => {
     expect(discountAmount(500, "fixed", 1000)).toBe(500);
     expect(parseCurrency("1.234,56")).toBe(123456);
     expect(formatChatCurrency(0)).toBe("GRÁTIS 🎁");
+    expect(calculateChange(10000, 7500)).toBe(2500);
   });
   it("midnight hours use tenant timezone and previous day", () => {
     const hours = [{ day_of_week: 5, start_time: "18:00", end_time: "01:00" }];

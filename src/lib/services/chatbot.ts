@@ -4,6 +4,7 @@ import { transaction, one, rows, type DB } from "@/lib/db";
 import { invariant, AppError } from "@/lib/errors";
 import { normalizeText } from "@/lib/domain/normalization";
 import {
+  calculateChange,
   formatChatCurrency,
   formatCurrency,
   parseCurrency,
@@ -184,7 +185,7 @@ async function cartSummary(db: DB, tenant: string, cart: string) {
   const q = await priceCart(db, tenant, cart);
   const items = q.items.map(
     (item, index) =>
-      `${keycapNumber(index + 1)} ${item.quantity}x ${item.size_name_snapshot || ""} ${item.name_snapshot}${item.border_name_snapshot ? " · Borda " + item.border_name_snapshot : ""} — ${formatChatCurrency(item.unit_price_cents * item.quantity)}${item.observation ? "\nObservação do Pedido: " + item.observation : ""}`,
+      `${keycapNumber(index + 1)} ${item.quantity}x ${item.size_name_snapshot || ""} ${item.name_snapshot}${item.border_name_snapshot ? " · " + item.border_name_snapshot : ""} — ${formatChatCurrency(item.unit_price_cents * item.quantity)}${item.observation ? "\nObservação do Pedido: " + item.observation : ""}`,
   );
   return {
     quote: q,
@@ -547,7 +548,7 @@ export async function processBotMessage(
         reply = joinBlocks(prompts[step], await options("category"));
       }
     }
-    async function buildFinalConfirmation(summary: string) {
+    async function buildFinalConfirmation(summary: string, totalCents: number) {
       const cart = await one<{
         service_type: string;
         payment_name: string;
@@ -566,7 +567,7 @@ export async function processBotMessage(
         `Pagamento: ${cart.payment_name}` +
         (cart.payment_type === "cash"
           ? cart.change_for_cents
-            ? ` · Troco para ${formatCurrency(cart.change_for_cents)}`
+            ? ` · Troco para ${formatCurrency(cart.change_for_cents)} · Troco a devolver: ${formatCurrency(calculateChange(cart.change_for_cents, totalCents))}`
             : " · Sem troco"
           : "");
       const fulfillment =
@@ -1266,7 +1267,10 @@ export async function processBotMessage(
             const final = await cartSummary(db, tenant, context.cartId!);
             context.quoteHash = final.quote.hash;
             step = "awaiting_final_confirmation";
-            reply = await buildFinalConfirmation(final.text);
+            reply = await buildFinalConfirmation(
+              final.text,
+              final.quote.total_cents,
+            );
           }
           break;
         case "awaiting_email":
@@ -1281,7 +1285,10 @@ export async function processBotMessage(
           const emailQuote = await cartSummary(db, tenant, context.cartId!);
           context.quoteHash = emailQuote.quote.hash;
           step = "awaiting_final_confirmation";
-          reply = await buildFinalConfirmation(emailQuote.text);
+          reply = await buildFinalConfirmation(
+            emailQuote.text,
+            emailQuote.quote.total_cents,
+          );
           break;
         case "awaiting_change":
           const change = isChoice(
@@ -1304,7 +1311,10 @@ export async function processBotMessage(
           );
           context.quoteHash = changeQuote.quote.hash;
           step = "awaiting_final_confirmation";
-          reply = await buildFinalConfirmation(changeQuote.text);
+          reply = await buildFinalConfirmation(
+            changeQuote.text,
+            changeQuote.quote.total_cents,
+          );
           break;
         case "awaiting_final_confirmation":
           if (
@@ -1371,7 +1381,10 @@ export async function processBotMessage(
               context.quoteHash = current.quote.hash;
               reply = joinBlocks(
                 "Os valores foram atualizados.",
-                await buildFinalConfirmation(current.text),
+                await buildFinalConfirmation(
+                  current.text,
+                  current.quote.total_cents,
+                ),
               );
               break;
             }
@@ -1385,7 +1398,7 @@ export async function processBotMessage(
               `Pedido #${order.order_number} recebido! 🍕`,
               namedMessage(
                 customer?.name,
-                "assim que seu pedido for confirmado seu pedido, vamos te avisar! 🔔",
+                "assim que seu pedido for confirmado, vamos te avisar! 🔔",
               ),
             );
             if (order.payment_method_type === "pix_manual") {

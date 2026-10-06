@@ -8,7 +8,7 @@ import {
   orderLabels,
   paymentLabels,
 } from "@/lib/domain/orders";
-import { formatChatCurrency } from "@/lib/domain/money";
+import { calculateChange, formatChatCurrency } from "@/lib/domain/money";
 import { formatAddress } from "@/lib/domain/address";
 import { getStoreOpenStatus, type BusinessHour } from "@/lib/domain/hours";
 import { priceCart } from "./pricing";
@@ -58,7 +58,7 @@ export async function orderSummary(db: DB, order: Order) {
     `Cliente: ${order.customer_name_snapshot}`,
     ...items.map(
       (i) =>
-        `${i.quantity}x ${i.size_name_snapshot || ""} ${i.name_snapshot}${i.border_name_snapshot ? " · Borda " + i.border_name_snapshot : ""} — ${formatChatCurrency(i.quantity * i.unit_price_cents)}${i.observation ? "\nObservação do Pedido: " + i.observation : ""}`,
+        `${i.quantity}x ${i.size_name_snapshot || ""} ${i.name_snapshot}${i.border_name_snapshot ? " · " + i.border_name_snapshot : ""} — ${formatChatCurrency(i.quantity * i.unit_price_cents)}${i.observation ? "\nObservação do Pedido: " + i.observation : ""}`,
     ),
     `Subtotal: ${formatChatCurrency(order.subtotal_cents)}`,
     order.discount_cents > 0
@@ -71,7 +71,7 @@ export async function orderSummary(db: DB, order: Order) {
       : "Retirada no local",
     `Pagamento: ${order.payment_method_name_snapshot} · ${paymentLabels[order.payment_status] || order.payment_status}`,
     order.change_for_cents
-      ? `Troco para ${formatChatCurrency(order.change_for_cents)}`
+      ? `Troco para ${formatChatCurrency(order.change_for_cents)}\nTroco a devolver: ${formatChatCurrency(calculateChange(order.change_for_cents, order.total_cents))}`
       : "",
     order.preparation_minutes
       ? `Preparo estimado: ${order.preparation_minutes} minutos`
