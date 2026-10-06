@@ -150,6 +150,8 @@ export function Conversations({
   const messagesEnd = useRef<HTMLDivElement>(null);
   const lastNewestId = useRef("");
   const lastSelected = useRef("");
+  const reading = useRef(false);
+  const detailRequest = useRef(0);
   const loadList = useCallback(
     () =>
       fetch(
@@ -174,10 +176,12 @@ export function Conversations({
   );
   const loadDetail = useCallback(() => {
     if (!selected) return Promise.resolve();
+    const requestId = ++detailRequest.current;
     return fetch(`/api/conversations?id=${selected}&page=${historyPage}`)
       .then(async (r) => {
         const b = await r.json();
         if (!r.ok) throw Error(b.error);
+        if (requestId !== detailRequest.current) return;
         setDetail(b.conversation);
         setMessages(b.messages);
         setHasMore(b.hasMore);
@@ -196,8 +200,50 @@ export function Conversations({
     return () => clearTimeout(timer);
   }, [loadList]);
   useEffect(() => {
+    const request = detailRequest;
     void loadDetail();
+    return () => {
+      request.current++;
+    };
   }, [loadDetail]);
+  useEffect(() => {
+    async function markVisibleConversationRead() {
+      if (
+        !selected ||
+        detail?.id !== selected ||
+        !detail.unread_count ||
+        !messages.length ||
+        document.visibilityState !== "visible" ||
+        reading.current
+      )
+        return;
+      reading.current = true;
+      try {
+        const response = await fetch("/api/conversations", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "read", id: selected }),
+        });
+        if (!response.ok) return;
+        setList((current) =>
+          current.map((item) =>
+            item.id === selected ? { ...item, unread_count: 0 } : item,
+          ),
+        );
+        setDetail((current) =>
+          current?.id === selected ? { ...current, unread_count: 0 } : current,
+        );
+      } finally {
+        reading.current = false;
+      }
+    }
+    const markRead = () => {
+      void markVisibleConversationRead().catch(() => {});
+    };
+    markRead();
+    document.addEventListener("visibilitychange", markRead);
+    return () => document.removeEventListener("visibilitychange", markRead);
+  }, [selected, detail, messages]);
   useRealtime(tenantId, "conversations", loadList, undefined, 2500);
   useRealtime(
     tenantId,
