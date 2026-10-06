@@ -5,46 +5,69 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRealtime } from "./realtime";
 export function NotificationBell({ tenantId }: { tenantId: string }) {
   const [unread, setUnread] = useState(0);
-  const previous = useRef<number | null>(null),
-    audio = useRef<AudioContext | null>(null);
+  const knownNotifications = useRef<Set<string> | null>(null),
+    audio = useRef<HTMLAudioElement | null>(null),
+    loading = useRef(false);
   useEffect(() => {
-    function enable() {
-      audio.current ??= new AudioContext();
-      void audio.current.resume().catch(() => {});
+    const player = new Audio("/sounds/toque-pedido-novo.mp3");
+    player.preload = "auto";
+    audio.current = player;
+    function unlock() {
+      player.muted = true;
+      void player
+        .play()
+        .then(() => {
+          player.pause();
+          player.currentTime = 0;
+          player.muted = false;
+          window.removeEventListener("pointerdown", unlock);
+          window.removeEventListener("keydown", unlock);
+        })
+        .catch(() => {
+          player.muted = false;
+        });
     }
-    window.addEventListener("pointerdown", enable, { once: true });
+    window.addEventListener("pointerdown", unlock);
+    window.addEventListener("keydown", unlock);
     return () => {
-      window.removeEventListener("pointerdown", enable);
-      void audio.current?.close();
+      window.removeEventListener("pointerdown", unlock);
+      window.removeEventListener("keydown", unlock);
+      player.pause();
       audio.current = null;
     };
   }, []);
   const load = useCallback(() => {
+    if (loading.current) return;
+    loading.current = true;
     void fetch("/api/notifications")
       .then(async (r) => {
         if (!r.ok) return;
         const b = await r.json();
         setUnread(b.unread);
+        const notices = (b.data || []) as { id: string; type: string }[];
+        const previous = knownNotifications.current;
+        const hasNewOrder =
+          previous !== null &&
+          notices.some(
+            (notice) => notice.type === "order.new" && !previous.has(notice.id),
+          );
+        knownNotifications.current = new Set(
+          notices.map((notice) => notice.id),
+        );
         if (
-          previous.current !== null &&
-          b.unread > previous.current &&
+          hasNewOrder &&
           b.preferences?.sound_enabled &&
-          audio.current?.state === "running"
+          b.preferences?.orders_enabled &&
+          audio.current
         ) {
-          const ctx = audio.current,
-            o = ctx.createOscillator(),
-            g = ctx.createGain();
-          o.connect(g);
-          g.connect(ctx.destination);
-          o.frequency.value = 740;
-          g.gain.setValueAtTime(0.07, ctx.currentTime);
-          g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.25);
-          o.start();
-          o.stop(ctx.currentTime + 0.25);
+          audio.current.currentTime = 0;
+          void audio.current.play().catch(() => {});
         }
-        previous.current = b.unread;
       })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => {
+        loading.current = false;
+      });
   }, []);
   useEffect(load, [load]);
   useRealtime(tenantId, "notifications", load);
