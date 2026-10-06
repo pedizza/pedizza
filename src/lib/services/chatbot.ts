@@ -184,7 +184,7 @@ async function cartSummary(db: DB, tenant: string, cart: string) {
   const q = await priceCart(db, tenant, cart);
   const items = q.items.map(
     (item, index) =>
-      `${keycapNumber(index + 1)} ${item.quantity}x ${item.size_name_snapshot || ""} ${item.name_snapshot}${item.border_name_snapshot ? " · Borda " + item.border_name_snapshot : ""}${item.observation ? "\nObs.: " + item.observation : ""} — ${formatChatCurrency(item.unit_price_cents * item.quantity)}`,
+      `${keycapNumber(index + 1)} ${item.quantity}x ${item.size_name_snapshot || ""} ${item.name_snapshot}${item.border_name_snapshot ? " · Borda " + item.border_name_snapshot : ""} — ${formatChatCurrency(item.unit_price_cents * item.quantity)}${item.observation ? "\nObservação do Pedido: " + item.observation : ""}`,
   );
   return {
     quote: q,
@@ -192,7 +192,9 @@ async function cartSummary(db: DB, tenant: string, cart: string) {
       items.join("\n\n"),
       [
         `Subtotal: ${formatChatCurrency(q.subtotal_cents)}`,
-        `Desconto: ${formatChatCurrency(q.discount_cents)}`,
+        q.discount_cents > 0
+          ? `Desconto: ${formatChatCurrency(q.discount_cents)}`
+          : "Desconto: Sem desconto aplicado",
         `Entrega: ${formatChatCurrency(q.delivery_fee_cents)}`,
         `Total: ${formatChatCurrency(q.total_cents)}`,
       ].join("\n"),
@@ -1131,6 +1133,8 @@ export async function processBotMessage(
                 "sem observação",
                 "nenhuma observação",
                 "nenhuma",
+                "não",
+                "sem",
               )
                 ? ""
                 : text,

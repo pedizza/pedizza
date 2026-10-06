@@ -58,10 +58,12 @@ export async function orderSummary(db: DB, order: Order) {
     `Cliente: ${order.customer_name_snapshot}`,
     ...items.map(
       (i) =>
-        `${i.quantity}x ${i.size_name_snapshot || ""} ${i.name_snapshot}${i.border_name_snapshot ? " · Borda " + i.border_name_snapshot : ""}\n${i.observation ? "Obs.: " + i.observation + "\n" : ""}${formatChatCurrency(i.quantity * i.unit_price_cents)}`,
+        `${i.quantity}x ${i.size_name_snapshot || ""} ${i.name_snapshot}${i.border_name_snapshot ? " · Borda " + i.border_name_snapshot : ""} — ${formatChatCurrency(i.quantity * i.unit_price_cents)}${i.observation ? "\nObservação do Pedido: " + i.observation : ""}`,
     ),
     `Subtotal: ${formatChatCurrency(order.subtotal_cents)}`,
-    `Desconto${order.coupon_code_snapshot ? " (" + order.coupon_code_snapshot + ")" : ""}: ${formatChatCurrency(order.discount_cents)}`,
+    order.discount_cents > 0
+      ? `Desconto${order.coupon_code_snapshot ? " (" + order.coupon_code_snapshot + ")" : ""}: ${formatChatCurrency(order.discount_cents)}`
+      : "Desconto: Sem desconto aplicado",
     `Entrega: ${formatChatCurrency(order.delivery_fee_cents)}`,
     `Total: ${formatChatCurrency(order.total_cents)}`,
     order.service_type === "delivery"
