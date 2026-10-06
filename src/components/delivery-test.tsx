@@ -1,4 +1,5 @@
 "use client";
+import { MapPin } from "lucide-react";
 import { useState } from "react";
 import { formatCurrency } from "@/lib/domain/money";
 export function DeliveryTest() {
@@ -50,8 +51,16 @@ export function DeliveryTest() {
     }
   }
   return (
-    <details className="card" style={{ padding: 24, marginTop: 24 }}>
-      <summary>Testar endereço e taxa de entrega</summary>
+    <details className="card delivery-test">
+      <summary>
+        <MapPin size={24} />
+        <span>
+          <strong>Simular uma entrega</strong>
+          <small>
+            Consulte um endereço e confira a distância e a taxa cobrada.
+          </small>
+        </span>
+      </summary>
       <form
         className="stack"
         style={{ marginTop: 20 }}
@@ -102,12 +111,17 @@ export function DeliveryTest() {
           </p>
         )}
         {result && (
-          <p role="status">
-            Taxa: {formatCurrency(result.fee_cents)}
-            {result.distance_meters != null
-              ? ` · Rota: ${(result.distance_meters / 1000).toFixed(2)} km`
-              : ""}
-          </p>
+          <div role="status" className="delivery-result">
+            <span>
+              Taxa de entrega<strong>{formatCurrency(result.fee_cents)}</strong>
+            </span>
+            {result.distance_meters != null && (
+              <span>
+                Distância da rota
+                <strong>{(result.distance_meters / 1000).toFixed(2)} km</strong>
+              </span>
+            )}
+          </div>
         )}
       </form>
     </details>

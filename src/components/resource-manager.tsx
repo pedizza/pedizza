@@ -1,6 +1,13 @@
 "use client";
 import { useState, useEffect, useCallback } from "react";
 import {
+  Settings2,
+  Pizza,
+  Users,
+  Ticket,
+  MapPin,
+  CreditCard,
+  Store,
   Plus,
   Search,
   Pencil,
@@ -36,6 +43,26 @@ export function ResourceManager({
   canArchive: boolean;
 }) {
   const resource = resources[resourceKey];
+  const SectionIcon = [
+    "produtos",
+    "bordas",
+    "categorias",
+    "regras-precos",
+  ].includes(resourceKey)
+    ? Pizza
+    : ["clientes", "enderecos"].includes(resourceKey)
+      ? Users
+      : ["campanhas", "cupons", "cupom-categorias", "cupom-produtos"].includes(
+            resourceKey,
+          )
+        ? Ticket
+        : ["entrega", "bairros", "faixas"].includes(resourceKey)
+          ? MapPin
+          : resourceKey === "pagamentos"
+            ? CreditCard
+            : resourceKey === "loja"
+              ? Store
+              : Settings2;
   const [category, setCategory] = useState("");
   const [categories, setCategories] = useState<{ id: string; name: string }[]>(
     [],
@@ -69,8 +96,8 @@ export function ResourceManager({
     [toggling, setToggling] = useState<string | null>(null),
     [dirty, setDirty] = useState(false);
   const load = useCallback(
-    (signal?: AbortSignal) =>
-      fetch(
+    (signal?: AbortSignal) => {
+      return fetch(
         `/api/data/${resourceKey}?page=${page}&q=${encodeURIComponent(search)}&category=${category}`,
         { signal },
       )
@@ -89,7 +116,10 @@ export function ResourceManager({
           if (e instanceof Error && e.name !== "AbortError")
             setError(e.message);
         })
-        .finally(() => setLoading(false)),
+        .finally(() => {
+          if (!signal?.aborted) setLoading(false);
+        });
+    },
     [resourceKey, page, search, category],
   );
   useEffect(() => {
@@ -345,6 +375,9 @@ export function ResourceManager({
       <div className="toolbar resource-heading">
         <div>
           <div className="resource-title">
+            <span className="resource-section-icon">
+              <SectionIcon size={18} aria-hidden="true" />
+            </span>
             <h2>{resource.title}</h2>
             {!resource.singleton && (
               <span className="resource-count">{total}</span>

@@ -44,14 +44,14 @@ export function WhatsappSettings({ canManage }: { canManage: boolean }) {
     }
   }
   return (
-    <div className="stack">
+    <div className="stack whatsapp-workspace">
       {state && !state.configured && (
         <p className="notice">
           A conexão com o WhatsApp ainda não está configurada. O administrador
           do Pedizza precisa concluir a configuração da integração.
         </p>
       )}
-      <div className="card">
+      <div className="card connection-panel">
         <div className="row between">
           <div className="row">
             <span className="icon-box">
@@ -78,7 +78,7 @@ export function WhatsappSettings({ canManage }: { canManage: boolean }) {
           </span>
         </div>
         {canManage && (
-          <div className="row" style={{ marginTop: 28 }}>
+          <div className="row connection-actions">
             <button
               className="btn"
               disabled={busy || !state?.configured}
@@ -110,6 +110,20 @@ export function WhatsappSettings({ canManage }: { canManage: boolean }) {
           </div>
         )}
       </div>
+      <ol className="connection-guide">
+        <li>
+          <strong>Use o número da loja</strong>Conecte o WhatsApp usado para
+          receber os pedidos dos seus clientes.
+        </li>
+        <li>
+          <strong>Leia o QR Code</strong>No celular, abra Aparelhos conectados e
+          escolha Conectar um aparelho.
+        </li>
+        <li>
+          <strong>Acompanhe as conversas</strong>Depois de conectar, acesse
+          Conversas para atender seus clientes.
+        </li>
+      </ol>
       {error && (
         <p className="feedback" role="alert">
           {error}
