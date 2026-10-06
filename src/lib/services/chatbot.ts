@@ -3,7 +3,11 @@ import { z } from "zod";
 import { transaction, one, rows, type DB } from "@/lib/db";
 import { invariant, AppError } from "@/lib/errors";
 import { normalizeText } from "@/lib/domain/normalization";
-import { formatCurrency, parseCurrency } from "@/lib/domain/money";
+import {
+  formatChatCurrency,
+  formatCurrency,
+  parseCurrency,
+} from "@/lib/domain/money";
 import { getStoreOpenStatus, type BusinessHour } from "@/lib/domain/hours";
 import {
   lookupCep,
@@ -27,7 +31,7 @@ import {
 type BotContext = {
   cartId?: string;
   address?: Partial<Address>;
-  options?: { id: string; name: string }[];
+  options?: { id: string; name: string; price_cents?: number }[];
   categoryId?: string;
   categoryName?: string;
   secondCategoryId?: string;
@@ -86,7 +90,7 @@ const prompts: Record<string, string> = {
   awaiting_split: "Deseja dois sabores?\n\n1️⃣ Sim\n2️⃣ Apenas este sabor",
   awaiting_second_category: "Escolha a categoria do segundo sabor:",
   awaiting_second_flavor: "Escolha o segundo sabor para o mesmo tamanho:",
-  awaiting_border: "Escolha uma borda:\n\nDigite 0️⃣ para continuar sem borda.",
+  awaiting_border: "Escolha uma borda ou digite 0️⃣ para continuar sem borda:",
   awaiting_observation:
     "Alguma observação?\n\nDigite 0️⃣ para continuar sem observação.",
   cart_menu:
@@ -145,17 +149,17 @@ async function cartSummary(db: DB, tenant: string, cart: string) {
   const q = await priceCart(db, tenant, cart);
   const items = q.items.map(
     (item, index) =>
-      `${keycapNumber(index + 1)} ${item.quantity}x ${item.size_name_snapshot || ""} ${item.name_snapshot}${item.border_name_snapshot ? " · Borda " + item.border_name_snapshot : ""}${item.observation ? "\nObs.: " + item.observation : ""} — ${formatCurrency(item.unit_price_cents * item.quantity)}`,
+      `${keycapNumber(index + 1)} ${item.quantity}x ${item.size_name_snapshot || ""} ${item.name_snapshot}${item.border_name_snapshot ? " · Borda " + item.border_name_snapshot : ""}${item.observation ? "\nObs.: " + item.observation : ""} — ${formatChatCurrency(item.unit_price_cents * item.quantity)}`,
   );
   return {
     quote: q,
     text: joinBlocks(
       items.join("\n\n"),
       [
-        `Subtotal: ${formatCurrency(q.subtotal_cents)}`,
-        `Desconto: ${formatCurrency(q.discount_cents)}`,
-        `Entrega: ${formatCurrency(q.delivery_fee_cents)}`,
-        `Total: ${formatCurrency(q.total_cents)}`,
+        `Subtotal: ${formatChatCurrency(q.subtotal_cents)}`,
+        `Desconto: ${formatChatCurrency(q.discount_cents)}`,
+        `Entrega: ${formatChatCurrency(q.delivery_fee_cents)}`,
+        `Total: ${formatChatCurrency(q.total_cents)}`,
       ].join("\n"),
     ),
   };
@@ -357,23 +361,27 @@ export async function processBotMessage(
       }
       if (kind === "border") {
         sql =
-          "select b.id,g.name || ' — ' || b.name name from public.menu_borders b join public.menu_border_groups g on g.tenant_id=b.tenant_id and g.id=b.group_id join public.menu_border_group_categories c on c.tenant_id=g.tenant_id and c.group_id=g.id where b.tenant_id=$1 and c.category_id=$2 and b.active and g.active and b.archived_at is null and g.archived_at is null order by g.sort_order,g.name,b.sort_order,b.name";
-        params.push(context.categoryId);
+          "select b.id,g.name || ' — ' || b.name name,coalesce(bp.price_cents,b.base_price_cents) price_cents from public.menu_borders b join public.menu_border_groups g on g.tenant_id=b.tenant_id and g.id=b.group_id join public.menu_border_group_categories c on c.tenant_id=g.tenant_id and c.group_id=g.id left join public.menu_border_prices bp on bp.tenant_id=b.tenant_id and bp.border_id=b.id and bp.size_id=$3 where b.tenant_id=$1 and c.category_id=$2 and b.active and g.active and b.archived_at is null and g.archived_at is null order by g.sort_order,g.name,b.sort_order,b.name";
+        params.push(context.categoryId, context.sizeId || null);
       }
       if (kind === "payment")
         sql =
           "select id,name from public.payment_methods where tenant_id=$1 and active and type<>'pix_mercado_pago' and archived_at is null order by sort_order,id limit 8 offset $2";
       if (!["category", "second_category", "second", "border"].includes(kind))
         params.push(context.page * 8);
-      context.options = await rows<{ id: string; name: string }>(
-        db,
-        sql,
-        params,
-      );
+      context.options = await rows<{
+        id: string;
+        name: string;
+        price_cents?: number;
+      }>(db, sql, params);
       return (
         context.options
-          .map((o, i) => `${keycapNumber(i + 1)} ${o.name}`)
-          .join("\n") +
+          .map((option, index) =>
+            kind === "border"
+              ? `${keycapNumber(index + 1)} ${option.name}\n*${formatChatCurrency(option.price_cents || 0)}*`
+              : `${keycapNumber(index + 1)} ${option.name}`,
+          )
+          .join(kind === "border" ? "\n\n" : "\n") +
         (["size", "payment"].includes(kind) && context.options.length === 8
           ? "\n\nDigite MAIS para ver outras opções."
           : "")
@@ -773,7 +781,7 @@ export async function processBotMessage(
           step = "awaiting_address_confirmation";
           reply = joinBlocks(
             formatAddress(savedAddress),
-            `Taxa: ${formatCurrency(delivery.fee_cents)}`,
+            `Taxa: ${formatChatCurrency(delivery.fee_cents)}`,
             prompts[step],
           );
           break;
@@ -848,7 +856,7 @@ export async function processBotMessage(
           );
           step = "awaiting_complement";
           reply = joinBlocks(
-            `Taxa: ${formatCurrency(delivery.fee_cents)}`,
+            `Taxa: ${formatChatCurrency(delivery.fee_cents)}`,
             prompts[step],
           );
           break;

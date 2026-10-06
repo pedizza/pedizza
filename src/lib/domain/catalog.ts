@@ -1,4 +1,4 @@
-import { formatCurrency } from "@/lib/domain/money";
+import { formatChatCurrency } from "@/lib/domain/money";
 import { keycapNumber } from "@/lib/domain/whatsapp";
 
 export const WHATSAPP_TEXT_LIMIT = 65_536;
@@ -13,7 +13,7 @@ export type CatalogProduct = {
 
 function priceLabel(product: CatalogProduct) {
   if (product.price_cents === null) return "Preço sob consulta";
-  const price = formatCurrency(product.price_cents).replace(/\u00a0/g, " ");
+  const price = formatChatCurrency(product.price_cents).replace(/\u00a0/g, " ");
   return product.price_count > 1 ? `a partir de ${price}` : price;
 }
 

@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { splitPrice, discountAmount, parseCurrency } from "@/lib/domain/money";
+import {
+  splitPrice,
+  discountAmount,
+  parseCurrency,
+  formatChatCurrency,
+} from "@/lib/domain/money";
 import {
   getStoreOpenStatus,
   getNextOpeningTime,
@@ -26,6 +31,7 @@ describe("domain invariants", () => {
     expect(discountAmount(4999, "percentage", 10)).toBe(500);
     expect(discountAmount(500, "fixed", 1000)).toBe(500);
     expect(parseCurrency("1.234,56")).toBe(123456);
+    expect(formatChatCurrency(0)).toBe("GRÁTIS 🎁");
   });
   it("midnight hours use tenant timezone and previous day", () => {
     const hours = [{ day_of_week: 5, start_time: "18:00", end_time: "01:00" }];
@@ -142,6 +148,23 @@ describe("domain invariants", () => {
     );
     expect(message.length).toBeLessThanOrEqual(WHATSAPP_TEXT_LIMIT);
   });
+  it("shows free catalog products without a zero price", () => {
+    const message = formatCategoryCatalog(
+      "Promoções",
+      [
+        {
+          id: "1",
+          name: "Brinde",
+          description: "Item promocional",
+          price_cents: 0,
+          price_count: 1,
+        },
+      ],
+      "Escolha um item.",
+    );
+    expect(message).toContain("*1️⃣ Brinde - GRÁTIS 🎁*");
+    expect(message).not.toContain("R$ 0,00");
+  });
   it("formats delivery addresses in Brazilian reading order", () => {
     expect(
       formatAddress({
@@ -153,8 +176,6 @@ describe("domain invariants", () => {
         city: "Mauá",
         state: "SP",
       }),
-    ).toBe(
-      "Rua Quinze de Novembro, nº 1395 - Jardim Bom Recanto - Mauá - SP",
-    );
+    ).toBe("Rua Quinze de Novembro, nº 1395 - Jardim Bom Recanto - Mauá - SP");
   });
 });

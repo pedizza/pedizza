@@ -3,6 +3,9 @@ export const formatCurrency = (cents: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(
     cents / 100,
   );
+
+export const formatChatCurrency = (cents: number) =>
+  cents === 0 ? "GRÁTIS 🎁" : formatCurrency(cents);
 export function parseCurrency(value: string) {
   const v = value
     .trim()
