@@ -1,0 +1,50 @@
+{
+  "name": "pedizza-gestor-de-pedidos",
+  "version": "1.0.0",
+  "description": "Gestor de pedidos em tempo real do Pedizza.",
+  "author": "Pedizza",
+  "private": true,
+  "main": "main.mjs",
+  "build": {
+    "appId": "br.com.pedizza.gestor",
+    "productName": "Pedizza Gestor de Pedidos",
+    "copyright": "Copyright © 2026 Pedizza",
+    "electronVersion": "44.5.1",
+    "asar": true,
+    "compression": "maximum",
+    "electronLanguages": [
+      "pt-BR"
+    ],
+    "directories": {
+      "output": "../dist/windows",
+      "buildResources": "assets"
+    },
+    "files": [
+      "main.mjs",
+      "assets/icon.png",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "assets/icon.png",
+      "artifactName": "Pedizza-Gestor-de-Pedidos-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Pedizza Gestor de Pedidos",
+      "runAfterFinish": true,
+      "deleteAppDataOnUninstall": false
+    }
+  }
+}

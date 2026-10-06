@@ -35,10 +35,12 @@ export function OrdersBoard({
   tenantId,
   permissions,
   autoPrint = false,
+  showConversation = true,
 }: {
   tenantId: string;
   permissions: Permission[];
   autoPrint?: boolean;
+  showConversation?: boolean;
 }) {
   const [orders, setOrders] = useState<Order[]>([]),
     [filter, setFilter] = useState(""),
@@ -414,7 +416,8 @@ export function OrdersBoard({
                   Imprimir
                 </Link>
               )}
-              {detail.order.conversation_id &&
+              {showConversation &&
+                detail.order.conversation_id &&
                 permissions.includes("conversations.view") && (
                   <Link
                     className="btn secondary"

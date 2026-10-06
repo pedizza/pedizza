@@ -14,7 +14,9 @@
     "db:migrate": "node --env-file=.env.local scripts/migrate.mjs",
     "format": "prettier --write src tests scripts",
     "test:e2e": "playwright test",
-    "check": "npm run lint && npm run typecheck && npm test && npm run build"
+    "check": "npm run lint && npm run typecheck && npm test && npm run build",
+    "desktop:dev": "electron desktop/main.mjs",
+    "desktop:dist:win": "electron-builder --projectDir desktop --win nsis --x64"
   },
   "dependencies": {
     "@js-temporal/polyfill": "^0.5.1",
@@ -41,6 +43,8 @@
     "@types/react": "latest",
     "@types/react-dom": "latest",
     "@types/web-push": "^3.6.4",
+    "electron": "^44.5.1",
+    "electron-builder": "^26.15.3",
     "eslint": "^9.0.0",
     "eslint-config-next": "^16.3.2",
     "prettier": "^3.9.9",

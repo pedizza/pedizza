@@ -29,6 +29,7 @@ export async function proxy(request: NextRequest) {
   response.headers.set("Content-Security-Policy", csp);
   if (
     path.startsWith("/app") ||
+    path.startsWith("/gestor-pedidos") ||
     path.startsWith("/master") ||
     path.startsWith("/api")
   )
