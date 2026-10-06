@@ -42,21 +42,30 @@ export async function priceItem(
     [tenant, item.product_ids],
   );
   invariant(
-    products.length === item.product_ids.length &&
-      products.every((p) => p.category_id === products[0].category_id),
+    products.length === item.product_ids.length,
     "Um produto ficou indisponível. Revise o carrinho.",
   );
   const first = products[0];
   invariant(
-    products.length === 1 || first.allow_split,
-    "Esta categoria não permite dois sabores.",
+    products.length === 1 || products.every((product) => product.allow_split),
+    "Uma das categorias não permite dois sabores.",
+  );
+  invariant(
+    products.every(
+      (product) => product.split_pricing === first.split_pricing,
+    ),
+    "As categorias possuem regras de preço incompatíveis.",
   );
   const flavors: { id: string; name: string; price_cents: number }[] = [];
   let sizeName: string | null = null;
   if (item.size_id) {
-    const size = await one<{ name: string; max_flavors: number }>(
+    const size = await one<{
+      name: string;
+      max_flavors: number;
+      category_id: string;
+    }>(
       db,
-      "select name,max_flavors from public.menu_sizes where tenant_id=$1 and id=$2 and category_id=$3 and active and archived_at is null",
+      "select name,max_flavors,category_id from public.menu_sizes where tenant_id=$1 and id=$2 and category_id=$3 and active and archived_at is null",
       [tenant, item.size_id, first.category_id],
     );
     invariant(
@@ -64,14 +73,27 @@ export async function priceItem(
       "Tamanho indisponível para esta combinação.",
     );
     sizeName = size.name;
-    const prices = await rows<{ item_id: string; price_cents: number }>(
+    const prices = await rows<{
+      item_id: string;
+      price_cents: number;
+      max_flavors: number;
+    }>(
       db,
-      "select item_id,price_cents from public.menu_item_prices where tenant_id=$1 and size_id=$2 and item_id=any($3::uuid[]) and active",
-      [tenant, item.size_id, item.product_ids],
+      `select distinct on(p.item_id) p.item_id,p.price_cents,s.max_flavors
+       from public.menu_item_prices p
+       join public.menu_sizes s on s.tenant_id=p.tenant_id and s.id=p.size_id and s.active and s.archived_at is null
+       join public.menu_items i on i.tenant_id=p.tenant_id and i.id=p.item_id and i.category_id=s.category_id
+       where p.tenant_id=$1 and p.item_id=any($2::uuid[]) and p.active and lower(s.name)=lower($3)
+       order by p.item_id,case when s.id=$4 then 0 else 1 end,s.sort_order,s.id`,
+      [tenant, item.product_ids, size.name, item.size_id],
     );
     for (const p of products) {
       const price = prices.find((x) => x.item_id === p.id);
       invariant(price, "Um sabor não possui preço neste tamanho.");
+      invariant(
+        products.length <= price.max_flavors,
+        "O tamanho não permite esta quantidade de sabores.",
+      );
       flavors.push({ id: p.id, name: p.name, price_cents: price.price_cents });
     }
   } else

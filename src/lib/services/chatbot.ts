@@ -29,6 +29,8 @@ type BotContext = {
   options?: { id: string; name: string }[];
   categoryId?: string;
   categoryName?: string;
+  secondCategoryId?: string;
+  secondCategoryName?: string;
   productIds?: string[];
   sizeId?: string | null;
   borderId?: string | null;
@@ -69,6 +71,7 @@ const prompts: Record<string, string> = {
   awaiting_product: "Escolha um produto:",
   awaiting_size: "Escolha o tamanho:",
   awaiting_split: "Deseja dois sabores?\n1️⃣ Sim\n2️⃣ Apenas este sabor",
+  awaiting_second_category: "Escolha a categoria do segundo sabor:",
   awaiting_second_flavor: "Escolha o segundo sabor para o mesmo tamanho:",
   awaiting_border:
     "Escolha uma borda ou digite 0️⃣ para continuar sem borda:",
@@ -316,8 +319,13 @@ export async function processBotMessage(
       }
       if (kind === "second") {
         sql =
-          "select i.id,i.name from public.menu_items i join public.menu_item_prices p on p.tenant_id=i.tenant_id and p.item_id=i.id and p.size_id=$3 and p.active where i.tenant_id=$1 and i.category_id=$2 and i.active and i.available and i.archived_at is null order by i.sort_order,i.id limit 8 offset $4";
-        params.push(context.categoryId, context.sizeId);
+          "select i.id,i.name from public.menu_items i join public.menu_item_prices p on p.tenant_id=i.tenant_id and p.item_id=i.id and p.active join public.menu_sizes s on s.tenant_id=p.tenant_id and s.id=p.size_id and s.active and s.archived_at is null where i.tenant_id=$1 and i.category_id=$2 and lower(s.name)=lower((select name from public.menu_sizes where tenant_id=$1 and id=$3)) and i.active and i.available and i.archived_at is null order by i.sort_order,i.id";
+        params.push(context.secondCategoryId, context.sizeId);
+      }
+      if (kind === "second_category") {
+        sql =
+          "select distinct c.id,c.name,c.sort_order from public.menu_categories c join public.menu_sizes s on s.tenant_id=c.tenant_id and s.category_id=c.id and s.active and s.archived_at is null join public.menu_item_prices p on p.tenant_id=s.tenant_id and p.size_id=s.id and p.active join public.menu_items i on i.tenant_id=p.tenant_id and i.id=p.item_id and i.category_id=c.id and i.active and i.available and i.archived_at is null where c.tenant_id=$1 and c.active and c.allow_split and c.archived_at is null and lower(s.name)=lower((select name from public.menu_sizes where tenant_id=$1 and id=$2)) and c.split_pricing=(select split_pricing from public.menu_categories where tenant_id=$1 and id=$3) order by c.sort_order,c.id";
+        params.push(context.sizeId, context.categoryId);
       }
       if (kind === "size") {
         sql =
@@ -332,7 +340,8 @@ export async function processBotMessage(
       if (kind === "payment")
         sql =
           "select id,name from public.payment_methods where tenant_id=$1 and active and type<>'pix_mercado_pago' and archived_at is null order by sort_order,id limit 8 offset $2";
-      if (kind !== "category") params.push(context.page * 8);
+      if (!["category", "second_category", "second"].includes(kind))
+        params.push(context.page * 8);
       context.options = await rows<{ id: string; name: string }>(
         db,
         sql,
@@ -369,6 +378,29 @@ export async function processBotMessage(
             footer,
           )
         : "Nenhum produto disponível nesta categoria.";
+    }
+    async function secondFlavorCatalog(footer: string) {
+      const products = await rows<CatalogProduct>(
+        db,
+        `select i.id,i.name,i.description,min(p.price_cents) price_cents,
+          count(distinct p.price_cents)::int price_count
+        from public.menu_items i
+        join public.menu_item_prices p on p.tenant_id=i.tenant_id and p.item_id=i.id and p.active
+        join public.menu_sizes s on s.tenant_id=p.tenant_id and s.id=p.size_id and s.active and s.archived_at is null
+        where i.tenant_id=$1 and i.category_id=$2 and i.active and i.available and i.archived_at is null
+          and lower(s.name)=lower((select name from public.menu_sizes where tenant_id=$1 and id=$3))
+        group by i.id,i.name,i.description,i.sort_order
+        order by i.sort_order,i.name,i.id`,
+        [tenant, context.secondCategoryId, context.sizeId],
+      );
+      context.options = products.map(({ id, name }) => ({ id, name }));
+      return products.length
+        ? formatCategoryCatalog(
+            context.secondCategoryName || "Segundo sabor",
+            products,
+            footer,
+          )
+        : "Nenhum sabor disponível nesta categoria para o tamanho escolhido.";
     }
     const selected = () => {
       const numeric = Number(normalized);
@@ -449,7 +481,6 @@ export async function processBotMessage(
     } else if (
       normalized === "mais" &&
       [
-        "awaiting_second_flavor",
         "awaiting_size",
         "awaiting_border",
         "awaiting_payment",
@@ -458,7 +489,6 @@ export async function processBotMessage(
       context.page = (context.page || 0) + 1;
       const kind = (
         {
-          awaiting_second_flavor: "second",
           awaiting_size: "size",
           awaiting_border: "border",
           awaiting_payment: "payment",
@@ -480,18 +510,22 @@ export async function processBotMessage(
         {
           awaiting_category: "category",
           browsing_category: "category",
-          awaiting_second_flavor: "second",
+          awaiting_second_category: "second_category",
           awaiting_size: "size",
           awaiting_border: "border",
           awaiting_payment: "payment",
         } as Record<string, string>
       )[step];
       reply =
-        (prompts[step] || prompts.main_menu) +
-        (previousKind
-          ? (step === "browsing_category" ? "\n\n" : "\n") +
-            (await options(previousKind))
-          : "");
+        step === "awaiting_second_flavor"
+          ? await secondFlavorCatalog(
+              "Responda com o número ou o nome do segundo sabor.",
+            )
+          : (prompts[step] || prompts.main_menu) +
+            (previousKind
+              ? (step === "browsing_category" ? "\n\n" : "\n") +
+                (await options(previousKind))
+              : "");
     } else
       switch (step) {
         case "main_menu":
@@ -761,6 +795,8 @@ export async function processBotMessage(
           }
           context.categoryId = selected()!.id;
           context.categoryName = selected()!.name;
+          context.secondCategoryId = undefined;
+          context.secondCategoryName = undefined;
           context.page = 0;
           step = "awaiting_product";
           reply = await categoryCatalog(
@@ -773,7 +809,7 @@ export async function processBotMessage(
           );
           if (category?.allow_split)
             followUp =
-              "🍕 *Quer dois sabores?*\n\nEscolha o primeiro sabor agora. Depois de escolher o tamanho, confirme em 1️⃣ Sim que deseja adicionar outro sabor e escolha o segundo. 😋";
+              "🍕 *Quer dois sabores?*\n\nEscolha o primeiro sabor agora. Depois de escolher o tamanho, confirme em 1️⃣ Sim. Em seguida, escolha a categoria e o segundo sabor do mesmo tamanho. 😋";
           break;
         case "browsing_category":
           if (!selected()) {
@@ -795,6 +831,8 @@ export async function processBotMessage(
             break;
           }
           context.productIds = [selected()!.id];
+          context.secondCategoryId = undefined;
+          context.secondCategoryName = undefined;
           context.sizeId = null;
           context.borderId = null;
           context.page = 0;
@@ -832,18 +870,32 @@ export async function processBotMessage(
           break;
         case "awaiting_split":
           if (normalized === "1") {
-            step = "awaiting_second_flavor";
+            step = "awaiting_second_category";
             context.page = 0;
-            reply = prompts[step] + "\n" + (await options("second"));
+            reply = prompts[step] + "\n" + (await options("second_category"));
           } else if (normalized === "2") {
             step = "awaiting_border";
             context.page = 0;
             reply = prompts[step] + "\n" + (await options("border"));
           } else reply = prompts[step];
           break;
+        case "awaiting_second_category":
+          if (!selected()) {
+            reply = prompts[step] + "\n" + (await options("second_category"));
+            break;
+          }
+          context.secondCategoryId = selected()!.id;
+          context.secondCategoryName = selected()!.name;
+          step = "awaiting_second_flavor";
+          reply = await secondFlavorCatalog(
+            "Responda com o número ou o nome do segundo sabor.",
+          );
+          break;
         case "awaiting_second_flavor":
           if (!selected()) {
-            reply = prompts[step];
+            reply = await secondFlavorCatalog(
+              "Responda com o número ou o nome do segundo sabor.",
+            );
             break;
           }
           invariant(
