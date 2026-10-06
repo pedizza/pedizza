@@ -1385,7 +1385,7 @@ export async function processBotMessage(
               `Pedido #${order.order_number} recebido! 🍕`,
               namedMessage(
                 customer?.name,
-                "assim que a pizzaria confirmar seu pedido, vamos te avisar! 🔔",
+                "assim que seu pedido for confirmado seu pedido, vamos te avisar! 🔔",
               ),
             );
             if (order.payment_method_type === "pix_manual") {
