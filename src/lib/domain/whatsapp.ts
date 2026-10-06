@@ -1,3 +1,25 @@
+import { normalizeText } from "@/lib/domain/normalization";
+
+const keycapDigits: Record<string, string> = {
+  "0": "0️⃣",
+  "1": "1️⃣",
+  "2": "2️⃣",
+  "3": "3️⃣",
+  "4": "4️⃣",
+  "5": "5️⃣",
+  "6": "6️⃣",
+  "7": "7️⃣",
+  "8": "8️⃣",
+  "9": "9️⃣",
+};
+
+export function keycapNumber(value: number) {
+  return String(value)
+    .split("")
+    .map((digit) => keycapDigits[digit] || digit)
+    .join("");
+}
+
 function record(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === "object"
     ? (value as Record<string, unknown>)
@@ -66,4 +88,3 @@ export function extractWhatsAppMessageText(
 
   return "";
 }
-import { normalizeText } from "@/lib/domain/normalization";

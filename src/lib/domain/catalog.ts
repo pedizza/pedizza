@@ -1,4 +1,5 @@
 import { formatCurrency } from "@/lib/domain/money";
+import { keycapNumber } from "@/lib/domain/whatsapp";
 
 export const WHATSAPP_TEXT_LIMIT = 65_536;
 
@@ -23,7 +24,7 @@ export function formatCategoryCatalog(
 ) {
   const entries = products.map((product, index) =>
     [
-      `*${index + 1}. ${product.name} - ${priceLabel(product)}*`,
+      `*${keycapNumber(index + 1)} ${product.name} - ${priceLabel(product)}*`,
       product.description.trim(),
     ]
       .filter(Boolean)

@@ -18,7 +18,7 @@ import { priceCart } from "./pricing";
 import { finalizeCart } from "./orders";
 import { orderLabels } from "@/lib/domain/orders";
 import type { WhatsAppList } from "@/lib/integrations/evolution";
-import { mainMenuOption } from "@/lib/domain/whatsapp";
+import { keycapNumber, mainMenuOption } from "@/lib/domain/whatsapp";
 import {
   formatCategoryCatalog,
   type CatalogProduct,
@@ -48,39 +48,41 @@ type Conversation = {
   bot_epoch: number;
 };
 const prompts: Record<string, string> = {
-  main_menu: "1 — Fazer pedido\n2 — Ver cardápio\n3 — Acompanhar pedido",
+  main_menu: "1️⃣ Fazer pedido\n2️⃣ Ver cardápio\n3️⃣ Acompanhar pedido",
   awaiting_name: "Como você se chama?",
-  awaiting_service: "Como deseja receber?\n1 — Entrega\n2 — Retirada",
+  awaiting_service: "Como deseja receber?\n1️⃣ Entrega\n2️⃣ Retirada",
   awaiting_cep: "Informe seu CEP (8 números).",
   awaiting_number: "Qual é o número do endereço?",
   awaiting_street: "Qual é o nome da rua?",
   awaiting_neighborhood: "Qual é o bairro?",
   awaiting_complement:
-    "Informe complemento ou referência. Digite 0 para continuar sem complemento.",
+    "Informe complemento ou referência. Digite 0️⃣ para continuar sem complemento.",
   awaiting_saved_address:
-    "Escolha um endereço salvo ou digite 0 para usar outro:",
+    "Escolha um endereço salvo ou digite 0️⃣ para usar outro:",
   awaiting_address_confirmation:
-    "Confirme o endereço e a taxa:\n1 — Confirmar\n2 — Corrigir CEP",
+    "Confirme o endereço e a taxa:\n1️⃣ Confirmar\n2️⃣ Corrigir CEP",
   delivery_out_of_range:
-    "Como deseja continuar?\n1 — Retirar na pizzaria\n2 — Voltar ao menu",
+    "Como deseja continuar?\n1️⃣ Retirar na pizzaria\n2️⃣ Voltar ao menu",
   awaiting_category: "Escolha uma categoria:",
   browsing_category: "*Escolha uma categoria para ver o cardápio:*",
   awaiting_product: "Escolha um produto:",
   awaiting_size: "Escolha o tamanho:",
-  awaiting_split: "Deseja dois sabores?\n1 — Sim\n2 — Apenas este sabor",
+  awaiting_split: "Deseja dois sabores?\n1️⃣ Sim\n2️⃣ Apenas este sabor",
   awaiting_second_flavor: "Escolha o segundo sabor:",
-  awaiting_border: "Escolha uma borda ou digite 0 para continuar sem borda:",
+  awaiting_border:
+    "Escolha uma borda ou digite 0️⃣ para continuar sem borda:",
   awaiting_quantity: "Qual a quantidade? (1 a 99)",
   awaiting_observation:
-    "Alguma observação? Digite 0 para continuar sem observação.",
+    "Alguma observação? Digite 0️⃣ para continuar sem observação.",
   cart_menu:
-    "1 — Adicionar mais itens\n2 — Finalizar\n3 — Aplicar cupom\n4 — Remover item",
+    "1️⃣ Adicionar mais itens\n2️⃣ Finalizar\n3️⃣ Aplicar cupom\n4️⃣ Remover item",
   awaiting_remove: "Digite o número do item para remover.",
-  awaiting_coupon: "Digite o código do cupom ou 0 para remover o cupom.",
+  awaiting_coupon: "Digite o código do cupom ou 0️⃣ para remover o cupom.",
   awaiting_payment: "Escolha a forma de pagamento:",
   awaiting_change:
-    "Precisa de troco? Informe o valor (ex.: 100,00) ou 0 para não precisar.",
-  awaiting_final_confirmation: "1 — CONFIRMAR PEDIDO\n2 — Voltar ao carrinho",
+    "Precisa de troco? Informe o valor (ex.: 100,00) ou 0️⃣ para não precisar.",
+  awaiting_final_confirmation:
+    "1️⃣ CONFIRMAR PEDIDO\n2️⃣ Voltar ao carrinho",
 };
 
 function mainMenu(store?: { display_name: string; welcome_message: string }) {
@@ -126,7 +128,7 @@ async function cartSummary(db: DB, tenant: string, cart: string) {
     text: [
       ...q.items.map(
         (i, n) =>
-          `${n + 1}. ${i.quantity}x ${i.size_name_snapshot || ""} ${i.name_snapshot}${i.border_name_snapshot ? " · Borda " + i.border_name_snapshot : ""}${i.observation ? "\nObs.: " + i.observation : ""} — ${formatCurrency(i.unit_price_cents * i.quantity)}`,
+          `${keycapNumber(n + 1)} ${i.quantity}x ${i.size_name_snapshot || ""} ${i.name_snapshot}${i.border_name_snapshot ? " · Borda " + i.border_name_snapshot : ""}${i.observation ? "\nObs.: " + i.observation : ""} — ${formatCurrency(i.unit_price_cents * i.quantity)}`,
       ),
       `Subtotal: ${formatCurrency(q.subtotal_cents)}`,
       `Desconto: ${formatCurrency(q.discount_cents)}`,
@@ -330,7 +332,9 @@ export async function processBotMessage(
         params,
       );
       return (
-        context.options.map((o, i) => `${i + 1} — ${o.name}`).join("\n") +
+        context.options
+          .map((o, i) => `${keycapNumber(i + 1)} ${o.name}`)
+          .join("\n") +
         (kind !== "category" && context.options.length === 8
           ? "\nDigite MAIS para ver outras opções."
           : "")
@@ -568,7 +572,9 @@ export async function processBotMessage(
               prompts[step] +
               (addresses.length
                 ? "\n" +
-                  addresses.map((a, i) => `${i + 1} — ${a.name}`).join("\n")
+                  addresses
+                    .map((a, i) => `${keycapNumber(i + 1)} ${a.name}`)
+                    .join("\n")
                 : "");
           } else {
             const cart = await ensureCart(
@@ -762,7 +768,7 @@ export async function processBotMessage(
           context.categoryId = selected()!.id;
           context.categoryName = selected()!.name;
           reply = await categoryCatalog(
-            "Digite 1 para fazer um pedido ou MENU para voltar.",
+            "Digite 1️⃣ para fazer um pedido ou MENU para voltar.",
           );
           step = "main_menu";
           break;

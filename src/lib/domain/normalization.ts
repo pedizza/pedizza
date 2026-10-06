@@ -3,6 +3,7 @@ export const normalizeText = (s: string) =>
   s
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[\uFE0F\u20E3]/g, "")
     .trim()
     .toLowerCase()
     .replace(/\s+/g, " ");

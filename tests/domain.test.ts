@@ -9,6 +9,7 @@ import { canConfirmManually, canTransition } from "@/lib/domain/orders";
 import { normalizePhone, validDocument } from "@/lib/domain/normalization";
 import {
   extractWhatsAppMessageText,
+  keycapNumber,
   mainMenuOption,
 } from "@/lib/domain/whatsapp";
 import {
@@ -110,6 +111,8 @@ describe("domain invariants", () => {
     expect(mainMenuOption("Acompanhar meu pedido")).toBe("3");
     expect(mainMenuOption("Status do pedido")).toBe("3");
     expect(mainMenuOption("qualquer coisa")).toBeNull();
+    expect(mainMenuOption("1️⃣")).toBe("1");
+    expect(keycapNumber(10)).toBe("1️⃣0️⃣");
   });
   it("formats every product in a category for WhatsApp", () => {
     const message = formatCategoryCatalog(
@@ -132,9 +135,9 @@ describe("domain invariants", () => {
       ],
       "Responda com o número ou o nome do produto.",
     );
-    expect(message).toContain("*1. Muçarela - R$ 52,00*\nMuçarela e tomate");
+    expect(message).toContain("*1️⃣ Muçarela - R$ 52,00*\nMuçarela e tomate");
     expect(message).toContain(
-      "\n\n*2. Calabresa - R$ 52,00*\nCalabresa e cebola",
+      "\n\n*2️⃣ Calabresa - R$ 52,00*\nCalabresa e cebola",
     );
     expect(message.length).toBeLessThanOrEqual(WHATSAPP_TEXT_LIMIT);
   });
