@@ -334,13 +334,13 @@ export async function processBotMessage(
       }
       if (kind === "border") {
         sql =
-          "select b.id,g.name || ' — ' || b.name name from public.menu_borders b join public.menu_border_groups g on g.tenant_id=b.tenant_id and g.id=b.group_id join public.menu_border_group_categories c on c.tenant_id=g.tenant_id and c.group_id=g.id where b.tenant_id=$1 and c.category_id=$2 and b.active and g.active and b.archived_at is null and g.archived_at is null order by g.sort_order,g.name,b.sort_order,b.name limit 8 offset $3";
+          "select b.id,g.name || ' — ' || b.name name from public.menu_borders b join public.menu_border_groups g on g.tenant_id=b.tenant_id and g.id=b.group_id join public.menu_border_group_categories c on c.tenant_id=g.tenant_id and c.group_id=g.id where b.tenant_id=$1 and c.category_id=$2 and b.active and g.active and b.archived_at is null and g.archived_at is null order by g.sort_order,g.name,b.sort_order,b.name";
         params.push(context.categoryId);
       }
       if (kind === "payment")
         sql =
           "select id,name from public.payment_methods where tenant_id=$1 and active and type<>'pix_mercado_pago' and archived_at is null order by sort_order,id limit 8 offset $2";
-      if (!["category", "second_category", "second"].includes(kind))
+      if (!["category", "second_category", "second", "border"].includes(kind))
         params.push(context.page * 8);
       context.options = await rows<{ id: string; name: string }>(
         db,
@@ -351,7 +351,7 @@ export async function processBotMessage(
         context.options
           .map((o, i) => `${keycapNumber(i + 1)} ${o.name}`)
           .join("\n") +
-        (kind !== "category" && context.options.length === 8
+        (["size", "payment"].includes(kind) && context.options.length === 8
           ? "\nDigite MAIS para ver outras opções."
           : "")
       );
@@ -909,7 +909,8 @@ export async function processBotMessage(
           break;
         case "awaiting_border":
           if (normalized !== "0" && !selected()) {
-            reply = prompts[step];
+            context.page = 0;
+            reply = prompts[step] + "\n" + (await options("border"));
             break;
           }
           context.borderId = normalized === "0" ? null : selected()!.id;
