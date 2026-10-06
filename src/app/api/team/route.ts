@@ -13,7 +13,7 @@ import { invariant } from "@/lib/errors";
 import { permissionCodes } from "@/lib/permissions";
 import { audit } from "@/lib/audit";
 import { appUrl } from "@/lib/env";
-import { mailConfigured, sendMail } from "@/lib/auth/mail";
+import { authEmail, mailConfigured, sendMail } from "@/lib/auth/mail";
 export async function GET() {
   try {
     const ctx = await requireTenant("team.view");
@@ -179,7 +179,14 @@ export async function POST(request: Request) {
           await sendMail(
             input.email,
             "Convite para o Pedizza",
-            "Acesse seu convite: " + link,
+            authEmail({
+              title: "Você recebeu um convite",
+              message:
+                "Uma pizzaria convidou você para fazer parte da equipe no Pedizza.",
+              action: "Acessar convite",
+              url: link,
+              expiration: "em 7 dias",
+            }),
           );
           emailSent = true;
         } catch {

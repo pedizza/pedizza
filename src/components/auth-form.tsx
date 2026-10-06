@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ArrowRight, ShieldCheck } from "lucide-react";
 import {
   login,
+  resendVerification,
   signup,
   recover,
   updatePassword,
@@ -13,11 +14,19 @@ import {
 export function AuthForm({
   mode,
   token,
+  notice,
 }: {
-  mode: "login" | "signup" | "recover" | "password";
+  mode: "login" | "signup" | "recover" | "resend" | "password";
   token?: string;
+  notice?: { type: "success" | "error"; message: string };
 }) {
-  const action = { login, signup, recover, password: updatePassword }[mode];
+  const action = {
+    login,
+    signup,
+    recover,
+    resend: resendVerification,
+    password: updatePassword,
+  }[mode];
   const [state, submit, pending] = useActionState<AuthState, FormData>(
     action,
     {},
@@ -26,6 +35,7 @@ export function AuthForm({
     login: "Bom ter você de volta.",
     signup: "Sua pizzaria começa aqui.",
     recover: "Vamos recuperar seu acesso.",
+    resend: "Confirme seu e-mail.",
     password: "Escolha sua nova senha.",
   }[mode];
   return (
@@ -68,7 +78,11 @@ export function AuthForm({
           <p className="muted">
             {mode === "signup"
               ? "Crie sua conta e conheça o plano Pedizza por R$ 89,90/mês."
-              : "Acesse sua conta para cuidar da sua operação."}
+              : mode === "recover"
+                ? "Enviaremos um link seguro para você criar uma nova senha."
+                : mode === "resend"
+                  ? "Enviaremos um novo link se sua conta ainda estiver aguardando confirmação."
+                  : "Acesse sua conta para cuidar da sua operação."}
           </p>
           <form action={submit}>
             {token && <input type="hidden" name="token" value={token} />}
@@ -111,7 +125,7 @@ export function AuthForm({
                 />
               </label>
             )}
-            {mode !== "recover" && (
+            {mode !== "recover" && mode !== "resend" && (
               <label>
                 Senha
                 <input
@@ -127,14 +141,42 @@ export function AuthForm({
                 />
               </label>
             )}
+            {(mode === "signup" || mode === "password") && (
+              <label>
+                Confirmar senha
+                <input
+                  name="password_confirmation"
+                  type="password"
+                  autoComplete="new-password"
+                  minLength={8}
+                  maxLength={128}
+                  required
+                  placeholder="Digite a senha novamente"
+                />
+              </label>
+            )}
             {mode === "login" && (
-              <Link
-                href="/recuperar-senha"
-                className="muted"
-                style={{ fontSize: 12, textAlign: "right" }}
+              <div
+                className="row"
+                style={{ justifyContent: "space-between", fontSize: 12 }}
               >
-                Esqueci minha senha
-              </Link>
+                <Link href="/reenviar-confirmacao" className="muted">
+                  Reenviar confirmação
+                </Link>
+                <Link href="/recuperar-senha" className="muted">
+                  Esqueci minha senha
+                </Link>
+              </div>
+            )}
+            {notice && !state.error && !state.success && (
+              <p
+                className={
+                  notice.type === "success" ? "feedback success" : "feedback"
+                }
+                role={notice.type === "success" ? "status" : "alert"}
+              >
+                {notice.message}
+              </p>
             )}
             {state.error && (
               <p className="feedback" role="alert">
@@ -153,9 +195,11 @@ export function AuthForm({
                   ? "Criar minha conta"
                   : mode === "recover"
                     ? "Enviar instruções"
-                    : mode === "password"
-                      ? "Salvar nova senha"
-                      : "Entrar na minha loja"}
+                    : mode === "resend"
+                      ? "Reenviar confirmação"
+                      : mode === "password"
+                        ? "Salvar nova senha"
+                        : "Entrar na minha loja"}
               <ArrowRight size={17} />
             </button>
           </form>

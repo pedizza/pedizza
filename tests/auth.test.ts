@@ -2,12 +2,26 @@ import { describe, it, expect, afterEach } from "vitest";
 import { SignJWT } from "jose";
 import { hashPassword, verifyPassword } from "@/lib/auth/password";
 import { signSession, verifySessionToken } from "@/lib/auth/jwt";
+import { authEmail } from "@/lib/auth/mail";
 const original = process.env.JWT_SECRET;
 afterEach(() => {
   if (original === undefined) delete process.env.JWT_SECRET;
   else process.env.JWT_SECRET = original;
 });
 describe("Own authentication", () => {
+  it("creates safe confirmation and recovery email content", () => {
+    const email = authEmail({
+      title: "Confirme sua conta",
+      message: "Olá <cliente>",
+      action: "Confirmar",
+      url: "https://www.pedizza.com.br/auth/confirm?token=abc&source=email",
+      expiration: "em 24 horas",
+    });
+    expect(email.text).toContain("https://www.pedizza.com.br/auth/confirm");
+    expect(email.html).toContain("Olá &lt;cliente&gt;");
+    expect(email.html).toContain("token=abc&amp;source=email");
+    expect(email.html).not.toContain("Olá <cliente>");
+  });
   it("hashes passwords with random salts and verifies without storing plaintext", async () => {
     const hash = await hashPassword("unit-test-password");
     expect(hash).not.toContain("unit-test-password");

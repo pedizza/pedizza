@@ -3,10 +3,10 @@ import { z } from "zod";
 import { redirect } from "next/navigation";
 import { cookies, headers } from "next/headers";
 import { randomBytes, createHash } from "node:crypto";
-import { transaction, one } from "@/lib/db";
+import { transaction, one, type DB } from "@/lib/db";
 import { hashPassword, verifyPassword } from "@/lib/auth/password";
 import { createSession, endSession } from "@/lib/auth/session";
-import { mailConfigured, sendMail } from "@/lib/auth/mail";
+import { authEmail, mailConfigured, sendMail } from "@/lib/auth/mail";
 import { rateLimit } from "@/lib/security/http";
 import { AppError } from "@/lib/errors";
 import { appUrl } from "@/lib/env";
@@ -18,6 +18,54 @@ const credentials = z.object({
   password: z.string().min(8, "Use pelo menos 8 caracteres.").max(128),
 });
 export type AuthState = { error?: string; success?: string };
+
+async function issueAuthToken(
+  db: DB,
+  userId: string,
+  purpose: "verify" | "reset",
+  lifetime: "24 hours" | "30 minutes",
+) {
+  const token = randomBytes(32).toString("hex");
+  await db.query(
+    "update private.auth_tokens set used_at=coalesce(used_at,now()) where user_id=$1 and purpose=$2 and used_at is null",
+    [userId, purpose],
+  );
+  await db.query(
+    `insert into private.auth_tokens(token_hash,user_id,purpose,expires_at)
+     values($1,$2,$3,now()+$4::interval)`,
+    [
+      createHash("sha256").update(token).digest("hex"),
+      userId,
+      purpose,
+      lifetime,
+    ],
+  );
+  return token;
+}
+
+async function sendVerification(email: string, token: string) {
+  const content = authEmail({
+    title: "Confirme sua conta",
+    message:
+      "Seu cadastro no Pedizza está quase pronto. Confirme seu e-mail para acessar sua pizzaria.",
+    action: "Confirmar meu e-mail",
+    url: appUrl() + "/auth/confirm?token=" + token,
+    expiration: "em 24 horas",
+  });
+  await sendMail(email, "Confirme sua conta Pedizza", content);
+}
+
+async function sendPasswordReset(email: string, token: string) {
+  const content = authEmail({
+    title: "Redefina sua senha",
+    message:
+      "Recebemos uma solicitação para criar uma nova senha para sua conta Pedizza.",
+    action: "Criar nova senha",
+    url: appUrl() + "/nova-senha?token=" + token,
+    expiration: "em 30 minutos",
+  });
+  await sendMail(email, "Recuperação de acesso Pedizza", content);
+}
 async function throttle(email: string, kind: string) {
   const h = await headers();
   const ip = process.env.VERCEL
@@ -82,6 +130,11 @@ export async function signup(_: AuthState, form: FormData): Promise<AuthState> {
     .extend({
       name: z.string().trim().min(2).max(120),
       store_name: z.string().trim().min(2).max(120),
+      password_confirmation: z.string().min(8).max(128),
+    })
+    .refine((data) => data.password === data.password_confirmation, {
+      message: "As senhas não coincidem.",
+      path: ["password_confirmation"],
     })
     .safeParse(Object.fromEntries(form));
   if (!parsed.success) return { error: parsed.error.issues[0].message };
@@ -93,55 +146,89 @@ export async function signup(_: AuthState, form: FormData): Promise<AuthState> {
   try {
     const d = parsed.data;
     await throttle(d.email, "signup");
-    const hash = await hashPassword(d.password),
-      token = randomBytes(32).toString("hex");
-    const created = await transaction(async (db) => {
-      if (
-        await one(db, "select id from private.accounts where email=$1", [
-          d.email,
-        ])
-      )
-        return false;
-      const id = crypto.randomUUID(),
-        tenant = crypto.randomUUID();
-      await db.query(
-        "insert into private.accounts(id,email,password_hash) values($1,$2,$3)",
-        [id, d.email, hash],
+    const hash = await hashPassword(d.password);
+    const result = await transaction(async (db) => {
+      const existing = await one<{
+        id: string;
+        email_verified_at: Date | null;
+      }>(
+        db,
+        "select id,email_verified_at from private.accounts where email=$1 for update",
+        [d.email],
       );
-      await db.query("insert into public.profiles(id,name) values($1,$2)", [
-        id,
-        d.name,
-      ]);
-      await db.query(
-        "insert into public.tenants(id,name,slug) values($1,$2,$3)",
-        [tenant, d.store_name, "loja-" + tenant],
-      );
-      await db.query(
-        "insert into public.tenant_members(tenant_id,user_id,role) values($1,$2,'owner')",
-        [tenant, id],
-      );
-      await db.query(
-        "insert into public.subscriptions(tenant_id,plan_id) select $1,id from public.subscription_plans where code='pedizza_monthly'",
-        [tenant],
-      );
-      await db.query(
-        "insert into private.auth_tokens(token_hash,user_id,purpose,expires_at) values($1,$2,'verify',now()+interval '24 hours')",
-        [createHash("sha256").update(token).digest("hex"), id],
-      );
-      return true;
+      if (existing?.email_verified_at) return null;
+      let id = existing?.id;
+      if (!id) {
+        id = crypto.randomUUID();
+        const tenant = crypto.randomUUID();
+        await db.query(
+          "insert into private.accounts(id,email,password_hash) values($1,$2,$3)",
+          [id, d.email, hash],
+        );
+        await db.query("insert into public.profiles(id,name) values($1,$2)", [
+          id,
+          d.name,
+        ]);
+        await db.query(
+          "insert into public.tenants(id,name,slug) values($1,$2,$3)",
+          [tenant, d.store_name, "loja-" + tenant],
+        );
+        await db.query(
+          "insert into public.tenant_members(tenant_id,user_id,role) values($1,$2,'owner')",
+          [tenant, id],
+        );
+        await db.query(
+          "insert into public.subscriptions(tenant_id,plan_id) select $1,id from public.subscription_plans where code='pedizza_monthly'",
+          [tenant],
+        );
+      }
+      return { token: await issueAuthToken(db, id, "verify", "24 hours") };
     });
-    if (created)
-      await sendMail(
-        d.email,
-        "Confirme sua conta Pedizza",
-        "Confirme sua conta: " + appUrl() + "/auth/confirm?token=" + token,
-      );
+    if (result) await sendVerification(d.email, result.token);
     return {
       success:
         "Confira seu e-mail para confirmar o cadastro. Se já tem conta, use a recuperação de senha.",
     };
   } catch (e) {
     return failure(e);
+  }
+}
+
+export async function resendVerification(
+  _: AuthState,
+  form: FormData,
+): Promise<AuthState> {
+  const email = z
+    .email()
+    .transform((value) => value.toLowerCase())
+    .safeParse(form.get("email"));
+  if (!email.success) return { error: "Informe um e-mail válido." };
+  if (!mailConfigured())
+    return {
+      error:
+        "O envio de confirmação ainda não está configurado. Contate o administrador.",
+    };
+  try {
+    await throttle(email.data, "resend-verification");
+    const token = await transaction(async (db) => {
+      const account = await one<{
+        id: string;
+        email_verified_at: Date | null;
+      }>(
+        db,
+        "select id,email_verified_at from private.accounts where email=$1",
+        [email.data],
+      );
+      if (!account || account.email_verified_at) return null;
+      return issueAuthToken(db, account.id, "verify", "24 hours");
+    });
+    if (token) await sendVerification(email.data, token);
+    return {
+      success:
+        "Se o cadastro estiver aguardando confirmação, enviaremos um novo link.",
+    };
+  } catch (error) {
+    return failure(error);
   }
 }
 export async function logout() {
@@ -165,26 +252,18 @@ export async function recover(
     };
   try {
     await throttle(email.data, "recover");
-    const token = randomBytes(32).toString("hex");
-    const user = await transaction(async (db) => {
+    const result = await transaction(async (db) => {
       const u = await one<{ id: string }>(
         db,
         "select id from private.accounts where email=$1",
         [email.data],
       );
-      if (u)
-        await db.query(
-          "insert into private.auth_tokens(token_hash,user_id,purpose,expires_at) values($1,$2,'reset',now()+interval '30 minutes')",
-          [createHash("sha256").update(token).digest("hex"), u.id],
-        );
-      return u;
+      if (!u) return null;
+      return {
+        token: await issueAuthToken(db, u.id, "reset", "30 minutes"),
+      };
     });
-    if (user)
-      await sendMail(
-        email.data,
-        "Recuperação de acesso Pedizza",
-        "Escolha uma nova senha: " + appUrl() + "/nova-senha?token=" + token,
-      );
+    if (result) await sendPasswordReset(email.data, result.token);
     return {
       success: "Se o e-mail estiver cadastrado, você receberá as instruções.",
     };
@@ -199,7 +278,12 @@ export async function updatePassword(
   const d = z
     .object({
       password: z.string().min(8).max(128),
+      password_confirmation: z.string().min(8).max(128),
       token: z.string().regex(/^[a-f0-9]{64}$/),
+    })
+    .refine((data) => data.password === data.password_confirmation, {
+      message: "As senhas não coincidem.",
+      path: ["password_confirmation"],
     })
     .safeParse(Object.fromEntries(form));
   if (!d.success)
@@ -240,5 +324,5 @@ export async function updatePassword(
     return failure(e);
   }
   await endSession();
-  redirect("/login");
+  redirect("/login?password=updated");
 }
