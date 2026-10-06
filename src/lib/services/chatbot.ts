@@ -49,6 +49,11 @@ type Conversation = {
   version: number;
   bot_epoch: number;
 };
+
+function isChoice(input: string, ...choices: string[]) {
+  return choices.some((choice) => normalizeText(choice) === input);
+}
+
 const prompts: Record<string, string> = {
   main_menu: "1️⃣ Fazer pedido\n2️⃣ Ver cardápio\n3️⃣ Acompanhar pedido",
   awaiting_name:
@@ -80,7 +85,7 @@ const prompts: Record<string, string> = {
     "Alguma observação? Digite 0️⃣ para continuar sem observação.",
   cart_menu:
     "1️⃣ Adicionar mais itens\n2️⃣ Finalizar\n3️⃣ Aplicar cupom\n4️⃣ Remover item",
-  awaiting_remove: "Digite o número do item para remover.",
+  awaiting_remove: "Digite o número ou o nome do item para remover.",
   awaiting_coupon: "Digite o código do cupom ou 0️⃣ para remover o cupom.",
   awaiting_payment: "Escolha a forma de pagamento:",
   awaiting_change:
@@ -162,11 +167,13 @@ export async function processBotMessage(
     externalError: string | undefined,
     externalErrorCode: string | undefined;
   try {
-    if (
-      initial.current_step === "awaiting_saved_address" &&
-      Number(normalized) > 0
-    ) {
-      const choice = initial.context.options?.[Number(normalized) - 1];
+    if (initial.current_step === "awaiting_saved_address") {
+      const numeric = Number(normalized);
+      const choice = Number.isInteger(numeric) && numeric > 0
+        ? initial.context.options?.[numeric - 1]
+        : initial.context.options?.find(
+            (option) => normalizeText(option.name) === normalized,
+          );
       if (choice) {
         const address = await transaction((db) =>
           one(
@@ -200,7 +207,7 @@ export async function processBotMessage(
       );
     if (
       initial.current_step === "awaiting_final_confirmation" &&
-      normalized === "1" &&
+      isChoice(normalized, "1", "confirmar", "confirmar pedido") &&
       initial.context.address
     )
       delivery = await quoteDelivery(
@@ -572,7 +579,15 @@ export async function processBotMessage(
           reply = prompts[step];
           break;
         case "delivery_out_of_range":
-          if (normalized === "1") {
+          if (
+            isChoice(
+              normalized,
+              "1",
+              "retirada",
+              "retirar",
+              "retirar na pizzaria",
+            )
+          ) {
             const cart = await ensureCart(
               db,
               tenant,
@@ -584,24 +599,31 @@ export async function processBotMessage(
             step = "awaiting_category";
             context.page = 0;
             reply = prompts[step] + "\n" + (await options("category"));
-          } else if (normalized === "2") {
+          } else if (isChoice(normalized, "2", "voltar", "voltar ao menu")) {
             step = "main_menu";
             reply = menu.text;
             replyList = menu.list;
           } else reply = prompts[step];
           break;
         case "awaiting_service":
-          if (!["1", "2"].includes(normalized)) {
+          const deliveryChoice = isChoice(normalized, "1", "entrega");
+          const pickupChoice = isChoice(
+            normalized,
+            "2",
+            "retirada",
+            "retirar",
+          );
+          if (!deliveryChoice && !pickupChoice) {
             reply = prompts[step];
             break;
           }
           invariant(
-            normalized === "1"
+            deliveryChoice
               ? store?.delivery_enabled
               : store?.pickup_enabled,
             "Esta modalidade está indisponível.",
           );
-          if (normalized === "1") {
+          if (deliveryChoice) {
             const addresses = await rows<{ id: string; name: string }>(
               db,
               "select id,label||': '||street||', '||number||' — '||neighborhood name from public.customer_addresses where tenant_id=$1 and customer_id=$2 and active and archived_at is null order by is_default desc,created_at desc limit 8",
@@ -633,7 +655,15 @@ export async function processBotMessage(
           }
           break;
         case "awaiting_saved_address":
-          if (normalized === "0") {
+          if (
+            isChoice(
+              normalized,
+              "0",
+              "outro",
+              "usar outro",
+              "outro endereço",
+            )
+          ) {
             step = "awaiting_cep";
             reply = prompts[step];
             break;
@@ -738,7 +768,15 @@ export async function processBotMessage(
           invariant(text.length <= 100, "Use até 100 caracteres.");
           context.address = {
             ...context.address,
-            complement: normalized === "0" ? "" : text.trim(),
+            complement: isChoice(
+              normalized,
+              "0",
+              "sem complemento",
+              "nenhum complemento",
+              "nenhum",
+            )
+              ? ""
+              : text.trim(),
           };
           await db.query(
             "update public.carts set address_snapshot=$3 where tenant_id=$1 and id=$2",
@@ -751,10 +789,12 @@ export async function processBotMessage(
             prompts[step];
           break;
         case "awaiting_address_confirmation":
-          if (normalized === "2") {
+          if (
+            isChoice(normalized, "2", "corrigir", "corrigir cep", "outro cep")
+          ) {
             step = "awaiting_cep";
             reply = prompts[step];
-          } else if (normalized === "1") {
+          } else if (isChoice(normalized, "1", "confirmar", "sim")) {
             const a = addressSchema.parse(context.address);
             const exists = await one(
               db,
@@ -869,11 +909,27 @@ export async function processBotMessage(
           }
           break;
         case "awaiting_split":
-          if (normalized === "1") {
+          if (
+            isChoice(
+              normalized,
+              "1",
+              "sim",
+              "dois sabores",
+              "adicionar outro sabor",
+            )
+          ) {
             step = "awaiting_second_category";
             context.page = 0;
             reply = prompts[step] + "\n" + (await options("second_category"));
-          } else if (normalized === "2") {
+          } else if (
+            isChoice(
+              normalized,
+              "2",
+              "não",
+              "apenas este sabor",
+              "um sabor",
+            )
+          ) {
             step = "awaiting_border";
             context.page = 0;
             reply = prompts[step] + "\n" + (await options("border"));
@@ -908,12 +964,19 @@ export async function processBotMessage(
           reply = prompts[step] + "\n" + (await options("border"));
           break;
         case "awaiting_border":
-          if (normalized !== "0" && !selected()) {
+          const withoutBorder = isChoice(
+            normalized,
+            "0",
+            "sem borda",
+            "nenhuma borda",
+            "não quero borda",
+          );
+          if (!withoutBorder && !selected()) {
             context.page = 0;
             reply = prompts[step] + "\n" + (await options("border"));
             break;
           }
-          context.borderId = normalized === "0" ? null : selected()!.id;
+          context.borderId = withoutBorder ? null : selected()!.id;
           step = "awaiting_quantity";
           reply = prompts[step];
           break;
@@ -941,7 +1004,15 @@ export async function processBotMessage(
               context.sizeId,
               context.borderId,
               context.quantity,
-              normalized === "0" ? "" : text,
+              isChoice(
+                normalized,
+                "0",
+                "sem observação",
+                "nenhuma observação",
+                "nenhuma",
+              )
+                ? ""
+                : text,
             ],
           );
           const summary = await cartSummary(db, tenant, context.cartId);
@@ -949,32 +1020,49 @@ export async function processBotMessage(
           reply = summary.text + "\n\n" + prompts[step];
           break;
         case "cart_menu":
-          if (normalized === "1") {
+          if (
+            isChoice(
+              normalized,
+              "1",
+              "adicionar mais itens",
+              "adicionar item",
+            )
+          ) {
             step = "awaiting_category";
             context.page = 0;
             reply = prompts[step] + "\n" + (await options("category"));
-          } else if (normalized === "2") {
+          } else if (
+            isChoice(normalized, "2", "finalizar", "finalizar pedido")
+          ) {
             step = "awaiting_payment";
             context.page = 0;
             reply = prompts[step] + "\n" + (await options("payment"));
-          } else if (normalized === "3") {
+          } else if (isChoice(normalized, "3", "aplicar cupom", "cupom")) {
             step = "awaiting_coupon";
             reply = prompts[step];
-          } else if (normalized === "4") {
+          } else if (isChoice(normalized, "4", "remover item", "remover")) {
             step = "awaiting_remove";
             reply = prompts[step];
           } else reply = prompts[step];
           break;
         case "awaiting_remove":
-          const items = await rows<{ id: string }>(
+          const items = await rows<{ id: string; name: string }>(
             db,
-            "select id from public.cart_items where tenant_id=$1 and cart_id=$2 order by created_at",
+            `select ci.id,
+              (select string_agg(i.name,' / ' order by array_position(ci.product_ids,i.id))
+               from public.menu_items i where i.tenant_id=ci.tenant_id and i.id=any(ci.product_ids)) name
+             from public.cart_items ci where ci.tenant_id=$1 and ci.cart_id=$2 order by ci.created_at`,
             [tenant, context.cartId],
           );
-          invariant(items[Number(normalized) - 1], "Escolha um item da lista.");
+          const itemNumber = Number(normalized);
+          const itemToRemove =
+            Number.isInteger(itemNumber) && itemNumber > 0
+              ? items[itemNumber - 1]
+              : items.find((item) => normalizeText(item.name) === normalized);
+          invariant(itemToRemove, "Escolha um item da lista.");
           await db.query(
             "delete from public.cart_items where tenant_id=$1 and id=$2",
-            [tenant, items[Number(normalized) - 1].id],
+            [tenant, itemToRemove.id],
           );
           step = items.length > 1 ? "cart_menu" : "awaiting_category";
           reply =
@@ -987,7 +1075,15 @@ export async function processBotMessage(
             [
               tenant,
               context.cartId,
-              normalized === "0" ? null : text.trim().toUpperCase(),
+              isChoice(
+                normalized,
+                "0",
+                "sem cupom",
+                "remover cupom",
+                "nenhum cupom",
+              )
+                ? null
+                : text.trim().toUpperCase(),
             ],
           );
           const couponSummary = await cartSummary(db, tenant, context.cartId!);
@@ -1053,7 +1149,15 @@ export async function processBotMessage(
             prompts[step];
           break;
         case "awaiting_change":
-          const change = normalized === "0" ? null : parseCurrency(text);
+          const change = isChoice(
+            normalized,
+            "0",
+            "sem troco",
+            "não precisa de troco",
+            "não",
+          )
+            ? null
+            : parseCurrency(text);
           const changeQuote = await cartSummary(db, tenant, context.cartId!);
           invariant(
             !change || change >= changeQuote.quote.total_cents,
@@ -1079,10 +1183,20 @@ export async function processBotMessage(
             prompts[step];
           break;
         case "awaiting_final_confirmation":
-          if (normalized === "2") {
+          if (
+            isChoice(
+              normalized,
+              "2",
+              "voltar",
+              "voltar ao carrinho",
+              "carrinho",
+            )
+          ) {
             step = "cart_menu";
             reply = prompts[step];
-          } else if (normalized === "1") {
+          } else if (
+            isChoice(normalized, "1", "confirmar", "confirmar pedido")
+          ) {
             if (delivery)
               await db.query(
                 "update public.carts set delivery_fee_cents=$3,distance_meters=$4 where tenant_id=$1 and id=$2",
