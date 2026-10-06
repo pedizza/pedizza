@@ -33,7 +33,20 @@ function string(value: unknown) {
 export function mainMenuOption(input: string): "1" | "2" | "3" | null {
   const text = normalizeText(input).replace(/[!,?.]+/g, "");
   if (
-    /^(1|pedido|pedir|fazer (um )?pedido|quero (fazer (um )?pedido|pedir))( por favor)?$/.test(
+    /\b(fazer (um |o )?pedido|quero (fazer )?(um |o )?pedido|quero pedir|montar (um |o )?pedido)\b/.test(
+      text,
+    )
+  )
+    return "1";
+  if (/\b(ver|mostrar|abrir) (o )?cardapio\b/.test(text)) return "2";
+  if (
+    /\b(acompanhar (meu |o )?pedido|status (do |de meu )?pedido|rastrear (meu |o )?pedido)\b/.test(
+      text,
+    )
+  )
+    return "3";
+  if (
+    /^(1|pedido|pedir|fazer (um |o )?pedido|quero (fazer (um |o )?pedido|pedir))( por favor)?$/.test(
       text,
     )
   )
@@ -53,9 +66,7 @@ export function mainMenuOption(input: string): "1" | "2" | "3" | null {
   return null;
 }
 
-export function extractWhatsAppMessageText(
-  message: Record<string, unknown>,
-) {
+export function extractWhatsAppMessageText(message: Record<string, unknown>) {
   const conversation = string(message.conversation);
   if (conversation) return conversation;
 

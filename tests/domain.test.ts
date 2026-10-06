@@ -116,6 +116,8 @@ describe("domain invariants", () => {
     expect(mainMenuOption("1")).toBe("1");
     expect(mainMenuOption("Fazer pedido")).toBe("1");
     expect(mainMenuOption("Quero fazer um pedido, por favor")).toBe("1");
+    expect(mainMenuOption("Fazer o pedido")).toBe("1");
+    expect(mainMenuOption("Olá, tudo bem? Quero fazer pedido")).toBe("1");
     expect(mainMenuOption("Ver o cardápio")).toBe("2");
     expect(mainMenuOption("Acompanhar meu pedido")).toBe("3");
     expect(mainMenuOption("Status do pedido")).toBe("3");

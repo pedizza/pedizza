@@ -18,7 +18,11 @@ import {
   deliveryOutOfRangeMessage,
   type Address,
 } from "@/lib/integrations/geo";
-import { interpretMessage, type NaturalOrder } from "@/lib/integrations/openai";
+import {
+  interpretMessage,
+  type MessageInterpretation,
+  type NaturalOrder,
+} from "@/lib/integrations/openai";
 import { enqueue, notify } from "./events";
 import { priceCart } from "./pricing";
 import { finalizeCart } from "./orders";
@@ -108,6 +112,45 @@ function shouldInterpretMessage(step: string, text: string) {
   )
     return false;
   return false;
+}
+
+function localInterpretation(
+  text: string,
+  step: string,
+): MessageInterpretation | null {
+  const normalized = normalizeText(text);
+  if (step === "main_menu" && mainMenuOption(normalized)) return null;
+  if (
+    /\b(status|acompanhar|rastrear|demora|tempo)\b/.test(normalized) &&
+    /\b(pedido|pronto|chegar|entrega)\b/.test(normalized)
+  )
+    return { intent: "order_status", query: text, order: null };
+  if (
+    /\b(endereco|onde fica|localizacao)\b/.test(normalized) &&
+    /\b(loja|pizzaria|retirada|entrega)\b/.test(normalized)
+  )
+    return { intent: "store_address", query: text, order: null };
+  if (/\b(horario|aberto|abre|fecha|funcionamento)\b/.test(normalized))
+    return { intent: "store_hours", query: text, order: null };
+  if (/\b(pagamento|pagar|cartao|pix|dinheiro)\b/.test(normalized))
+    return { intent: "payment_methods", query: text, order: null };
+  if (
+    /\b(como|pode|posso|funciona|pedir|escolher)\b/.test(normalized) &&
+    /\b(dois sabores|meio a meio|meia a meia)\b/.test(normalized)
+  )
+    return { intent: "split_help", query: text, order: null };
+  if (/\b(robo|inteligencia artificial|voce e ia)\b/.test(normalized))
+    return { intent: "identity", query: text, order: null };
+  if (
+    /\b(vende|vendem|tem|possui|serve|oferece)\b/.test(normalized) &&
+    !/\b(status|pedido|horario|pagamento)\b/.test(normalized)
+  )
+    return { intent: "search", query: text, order: null };
+  if (
+    /^(oi|ola|bom dia|boa tarde|boa noite)( tudo bem)?[!.? ]*$/.test(normalized)
+  )
+    return { intent: "small_talk", query: text, order: null };
+  return null;
 }
 
 const prompts: Record<string, string> = {
@@ -247,9 +290,12 @@ export async function processBotMessage(
   );
   if (!initial) return;
   const normalized = normalizeText(text);
-  const interpretation = shouldInterpretMessage(initial.current_step, text)
-    ? await interpretMessage(text, initial.current_step)
-    : null;
+  const quickInterpretation = localInterpretation(text, initial.current_step);
+  const interpretation =
+    quickInterpretation ||
+    (shouldInterpretMessage(initial.current_step, text)
+      ? await interpretMessage(text, initial.current_step)
+      : null);
   if (
     interpretation &&
     interpretation.intent !== "order" &&
@@ -693,7 +739,8 @@ export async function processBotMessage(
     }
 
     async function currentStepMessage() {
-      if (step === "main_menu") return menu.text;
+      if (step === "main_menu")
+        return joinBlocks("Como podemos ajudar?", prompts.main_menu);
       if (step === "awaiting_product")
         return categoryCatalog("Responda com o número ou o nome do produto.");
       if (step === "awaiting_second_flavor")
@@ -1248,6 +1295,7 @@ export async function processBotMessage(
         200,
       );
       const words = normalizeText(query)
+        .replace(/[^\p{L}\p{N}\s]/gu, " ")
         .split(/\s+/)
         .filter(
           (word) =>
@@ -1260,6 +1308,12 @@ export async function processBotMessage(
               "voces",
               "voce",
               "tem",
+              "vende",
+              "vendem",
+              "possui",
+              "serve",
+              "oferece",
+              "kkk",
             ].includes(word),
         );
       const catalog = await rows<{
@@ -1292,7 +1346,9 @@ export async function processBotMessage(
                 `*${x.name}${x.price_cents === null ? "" : ` — ${formatChatCurrency(x.price_cents)}`}*\n${x.description || "Não há informações adicionais no cardápio."}`,
             )
             .join("\n\n")
-        : "Não encontrei essa informação nos dados da pizzaria. Posso chamar um atendente da equipe se você quiser.";
+        : words.includes("pao")
+          ? "Pão não vendemos 😄 Por aqui, o forno está ocupado preparando nossas pizzas e outras delícias do cardápio! 🍕"
+          : "Essa opção não aparece no nosso cardápio 😄 Mas temos várias delícias esperando por você! 🍕";
       reply = joinBlocks(
         reply,
         "Vamos continuar de onde paramos 😊",
