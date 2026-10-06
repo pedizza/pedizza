@@ -65,12 +65,26 @@ function joinBlocks(...blocks: Array<string | null | undefined | false>) {
     .join("\n\n");
 }
 
+function firstName(name?: string) {
+  return (
+    name
+      ?.trim()
+      .split(/\s+/)[0]
+      ?.replace(/[*_~`]/g, "") || ""
+  );
+}
+
+function namedMessage(name: string | undefined, message: string) {
+  const namePart = firstName(name);
+  return namePart ? `*${namePart}*, ${message}` : message;
+}
+
 const prompts: Record<string, string> = {
   main_menu: "1️⃣ Fazer pedido\n2️⃣ Ver cardápio\n3️⃣ Acompanhar pedido",
   awaiting_name:
     "Perfeito, vamos começar a anotar seu pedido! 🍕\n\nQual seu nome, por gentileza? 😊",
   awaiting_service:
-    "Como deseja receber seu pedido? 🍕\n\n1️⃣ Entrega 🛵\n2️⃣ Retirada 🏪",
+    "Como você prefere receber seu pedido? 🍕\n\n1️⃣ Entrega 🛵\n2️⃣ Retirada 🏪",
   awaiting_cep: "Informe seu CEP (8 números).",
   awaiting_number: "Qual é o número do endereço?",
   awaiting_street: "Qual é o nome da rua?",
@@ -83,14 +97,17 @@ const prompts: Record<string, string> = {
     "Confirme o endereço e a taxa:\n\n1️⃣ Confirmar\n2️⃣ Corrigir CEP",
   delivery_out_of_range:
     "Como deseja continuar?\n\n1️⃣ Retirar na pizzaria\n2️⃣ Voltar ao menu",
-  awaiting_category: "Escolha uma categoria:",
+  awaiting_category:
+    "O que você gostaria de pedir? 😋\n\nEscolha uma categoria:",
   browsing_category: "*Escolha uma categoria para ver o cardápio:*",
   awaiting_product: "Escolha um produto:",
-  awaiting_size: "Escolha o tamanho:",
-  awaiting_split: "Deseja dois sabores?\n\n1️⃣ Sim\n2️⃣ Apenas este sabor",
+  awaiting_size: "Agora escolha o tamanho ideal para você 🍕",
+  awaiting_split:
+    "Quer aproveitar dois sabores na mesma pizza? 😋\n\n1️⃣ Sim\n2️⃣ Apenas este sabor",
   awaiting_second_category: "Escolha a categoria do segundo sabor:",
   awaiting_second_flavor: "Escolha o segundo sabor para o mesmo tamanho:",
-  awaiting_border: "Escolha uma borda ou digite 0️⃣ para continuar sem borda:",
+  awaiting_border:
+    "Que tal deixar seu pedido ainda mais gostoso? 😍\n\nEscolha uma borda ou digite 0️⃣ para continuar sem borda:",
   awaiting_observation:
     "Alguma observação?\n\nDigite 0️⃣ para continuar sem observação.",
   cart_menu:
@@ -98,15 +115,20 @@ const prompts: Record<string, string> = {
   awaiting_remove: "Digite o número ou o nome do item para remover.",
   awaiting_coupon:
     "Digite o código do cupom.\n\nDigite 0️⃣ para remover o cupom.",
-  awaiting_payment: "Escolha a forma de pagamento:",
+  awaiting_payment:
+    "Estamos quase terminando! 🙌\n\nEscolha a forma de pagamento:",
   awaiting_change:
-    "Precisa de troco?\n\nInforme o valor (ex.: 100,00) ou digite 0️⃣ para continuar sem troco.",
+    "Vai precisar de troco? 💵\n\nInforme o valor (ex.: 100,00) ou digite 0️⃣ para continuar sem troco.",
   awaiting_final_confirmation:
     "1️⃣ CONFIRMAR PEDIDO\n2️⃣ Adicionar mais itens\n3️⃣ Trocar meu pedido",
 };
 
-function cartMenuMessage(summary: string) {
-  return joinBlocks("Anotei o seu pedido! 📝", summary, prompts.cart_menu);
+function cartMenuMessage(summary: string, customerName?: string) {
+  return joinBlocks(
+    namedMessage(customerName, "seu pedido ficou assim até agora! 🍕"),
+    summary,
+    prompts.cart_menu,
+  );
 }
 
 function mainMenu(
@@ -114,20 +136,17 @@ function mainMenu(
   returningCustomer?: { name: string; has_order: boolean },
 ) {
   const storeName = store?.display_name.trim() || "nossa pizzaria";
-  const firstName = returningCustomer?.name
-    .trim()
-    .split(/\s+/)[0]
-    ?.replace(/[*_~`]/g, "");
+  const customerFirstName = firstName(returningCustomer?.name);
   const returningGreeting =
-    returningCustomer?.has_order && firstName
-      ? `Olá! Seja bem-vindo (a) de volta *${firstName}* 🍕`
+    returningCustomer?.has_order && customerFirstName
+      ? `Olá! Seja bem-vindo (a) de volta *${customerFirstName}* 🍕`
       : undefined;
   const greeting =
     returningGreeting ||
     store?.welcome_message.trim() ||
     `Olá! Seja bem-vindo (a) ${storeName} 🍕`;
   const listTitle = returningGreeting
-    ? `Olá! Seja bem-vindo (a) de volta ${firstName} 🍕`
+    ? `Olá! Seja bem-vindo (a) de volta ${customerFirstName} 🍕`
     : `Olá! Seja bem-vindo (a) ${storeName} 🍕`;
   return {
     text: `${greeting}\n\nComo podemos ajudar?\n\n${prompts.main_menu}`,
@@ -424,7 +443,7 @@ export async function processBotMessage(
       context.options = products.map(({ id, name }) => ({ id, name }));
       return products.length
         ? formatCategoryCatalog(
-            context.categoryName || "Cardápio",
+            `Confira nossas opções de ${context.categoryName || "cardápio"} 😋`,
             products,
             footer,
           )
@@ -529,7 +548,10 @@ export async function processBotMessage(
           ? `Endereço: ${formatAddress(context.address)}`
           : "Retirada no local";
       return joinBlocks(
-        "Confirme se o pedido está correto, por gentileza? 😊",
+        namedMessage(
+          customer?.name,
+          "Confirme se o pedido está correto, por gentileza? 😊",
+        ),
         [summary, payment, fulfillment].join("\n"),
         prompts.awaiting_final_confirmation,
       );
@@ -622,7 +644,7 @@ export async function processBotMessage(
     } else if (normalized === "carrinho" && context.cartId) {
       const summary = await cartSummary(db, tenant, context.cartId);
       step = "cart_menu";
-      reply = cartMenuMessage(summary.text);
+      reply = cartMenuMessage(summary.text, customer?.name);
     } else if (normalized === "voltar") {
       step = context.previousStep || "main_menu";
       context.page = 0;
@@ -1083,7 +1105,10 @@ export async function processBotMessage(
           }
           context.borderId = withoutBorder ? null : selected()!.id;
           step = "awaiting_observation";
-          reply = prompts[step];
+          reply = joinBlocks(
+            namedMessage(customer?.name, "Anotei o seu pedido! 📝"),
+            prompts[step],
+          );
           break;
         case "awaiting_observation":
           invariant(text.length <= 500, "Use até 500 caracteres.");
@@ -1113,7 +1138,7 @@ export async function processBotMessage(
           );
           const summary = await cartSummary(db, tenant, context.cartId);
           step = "cart_menu";
-          reply = cartMenuMessage(summary.text);
+          reply = cartMenuMessage(summary.text, customer?.name);
           break;
         case "cart_menu":
           if (
@@ -1161,7 +1186,7 @@ export async function processBotMessage(
               context.cartId!,
             );
             step = "cart_menu";
-            reply = cartMenuMessage(updatedSummary.text);
+            reply = cartMenuMessage(updatedSummary.text, customer?.name);
           } else {
             step = "awaiting_category";
             reply = joinBlocks(prompts[step], await options("category"));
@@ -1186,7 +1211,7 @@ export async function processBotMessage(
           );
           const couponSummary = await cartSummary(db, tenant, context.cartId!);
           step = "cart_menu";
-          reply = cartMenuMessage(couponSummary.text);
+          reply = cartMenuMessage(couponSummary.text, customer?.name);
           break;
         case "awaiting_payment":
           if (!selected()) {
@@ -1328,7 +1353,13 @@ export async function processBotMessage(
               context.cartId!,
               context.quoteHash!,
             );
-            reply = `Pedido #${order.order_number} recebido! 🍕\n\nAguardando confirmação da pizzaria. Avisaremos quando for aceito.`;
+            reply = joinBlocks(
+              `Pedido #${order.order_number} recebido! 🍕`,
+              namedMessage(
+                customer?.name,
+                "assim que a pizzaria confirmar seu pedido, vamos te avisar! 🔔",
+              ),
+            );
             if (order.payment_method_type === "pix_manual") {
               const pix = await one<{ pix_key: string }>(
                 db,
