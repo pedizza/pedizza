@@ -1,10 +1,13 @@
 "use client";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { Bell } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRealtime } from "./realtime";
 export function NotificationBell({ tenantId }: { tenantId: string }) {
+  const pathname = usePathname();
   const [unread, setUnread] = useState(0);
+  const [pendingCount, setPendingCount] = useState(0);
   const audio = useRef<HTMLAudioElement | null>(null),
     loading = useRef(false),
     preferences = useRef({ sound: false, orders: true }),
@@ -103,6 +106,7 @@ export function NotificationBell({ tenantId }: { tenantId: string }) {
         if (detail.order?.order_status === "new")
           pendingOrders.current.add(detail.orderId);
         else pendingOrders.current.delete(detail.orderId);
+        setPendingCount(pendingOrders.current.size);
         window.dispatchEvent(
           new CustomEvent("pedizza:order-change", { detail }),
         );
@@ -116,36 +120,67 @@ export function NotificationBell({ tenantId }: { tenantId: string }) {
           ids?: string[];
         };
         pendingOrders.current = new Set(detail.ids || []);
+        setPendingCount(pendingOrders.current.size);
         syncOrderAlarm();
       } catch {}
     });
     return () => source.close();
   }, [tenantId, load]);
 
+  const onOrdersPage =
+    pathname.startsWith("/app/pedidos") ||
+    pathname.startsWith("/gestor-pedidos");
   return (
-    <Link
-      href="/app/notificacoes"
-      className="icon-button"
-      aria-label={`Notificações: ${unread} não lidas`}
-      style={{ position: "relative" }}
-    >
-      <Bell size={18} />
-      {unread > 0 && (
-        <span
-          style={{
-            position: "absolute",
-            top: -5,
-            right: -6,
-            fontSize: 10,
-            background: "#dc3025",
-            color: "white",
-            padding: "1px 4px",
-            borderRadius: 10,
-          }}
+    <>
+      <Link
+        href="/app/notificacoes"
+        className="icon-button"
+        aria-label={`Notificações: ${unread} não lidas`}
+        style={{ position: "relative" }}
+      >
+        <Bell size={18} />
+        {unread > 0 && (
+          <span
+            style={{
+              position: "absolute",
+              top: -5,
+              right: -6,
+              fontSize: 10,
+              background: "#dc3025",
+              color: "white",
+              padding: "1px 4px",
+              borderRadius: 10,
+            }}
+          >
+            {unread > 99 ? "99+" : unread}
+          </span>
+        )}
+      </Link>
+      {pendingCount > 0 && !onOrdersPage && (
+        <div
+          className="new-order-alert"
+          role="alertdialog"
+          aria-live="assertive"
+          aria-label="Novos pedidos aguardando atendimento"
         >
-          {unread > 99 ? "99+" : unread}
-        </span>
+          <span className="new-order-alert-icon">🍕</span>
+          <div>
+            <strong>
+              {pendingCount === 1
+                ? "Novo pedido chegou!"
+                : `${pendingCount} novos pedidos chegaram!`}
+            </strong>
+            <p>
+              {pendingCount === 1
+                ? "Um pedido está aguardando atendimento."
+                : "Há pedidos aguardando atendimento."}
+            </p>
+          </div>
+          <Link className="btn" href="/app/pedidos">
+            Ir para os pedidos
+          </Link>
+        </div>
       )}
-    </Link>
+    </>
   );
 }
