@@ -5,6 +5,14 @@
   "author": "Pedizza",
   "private": true,
   "main": "main.mjs",
+  "scripts": {
+    "dev": "electron main.mjs",
+    "dist:win": "electron-builder --win nsis --x64"
+  },
+  "devDependencies": {
+    "electron": "^44.5.1",
+    "electron-builder": "^26.15.3"
+  },
   "build": {
     "appId": "br.com.pedizza.gestor",
     "productName": "Pedizza Gestor de Pedidos",
@@ -46,5 +54,9 @@
       "runAfterFinish": true,
       "deleteAppDataOnUninstall": false
     }
+  },
+  "devDependencies": {
+    "electron": "^44.5.1",
+    "electron-builder": "^26.15.3"
   }
 }
