@@ -75,19 +75,26 @@ export async function lookupCep(tenant: string, cep: string) {
 
 export async function lookupAddress(
   tenant: string,
-  input: Partial<Address> & { street: string; number: string },
+  input: Partial<Address> & {
+    query?: string;
+    street?: string;
+    number?: string;
+  },
 ) {
-  const query = [
-    input.street,
-    input.number,
-    input.neighborhood,
-    input.city,
-    input.state,
-    input.postal_code,
-    "Brasil",
-  ]
-    .filter(Boolean)
-    .join(", ");
+  const query =
+    input.query?.trim() ||
+    [
+      input.street,
+      input.number,
+      input.neighborhood,
+      input.city,
+      input.state,
+      input.postal_code,
+      "Brasil",
+    ]
+      .filter(Boolean)
+      .join(", ");
+  invariant(query.length >= 5, "Informe o endereço para localizarmos.");
   return cached(
     tenant,
     "address:" + normalizeText(query),

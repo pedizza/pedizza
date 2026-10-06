@@ -29,7 +29,11 @@ import { finalizeCart } from "./orders";
 import { orderLabels } from "@/lib/domain/orders";
 import type { WhatsAppList } from "@/lib/integrations/evolution";
 import { keycapNumber, mainMenuOption } from "@/lib/domain/whatsapp";
-import { formatAddress } from "@/lib/domain/address";
+import { formatAddress, normalizeBrazilianState } from "@/lib/domain/address";
+import {
+  normalizeCatalogTerm,
+  parseNaturalPizzaOrder,
+} from "@/lib/domain/natural-order";
 import {
   formatCategoryCatalog,
   type CatalogProduct,
@@ -290,9 +294,16 @@ export async function processBotMessage(
   );
   if (!initial) return;
   const normalized = normalizeText(text);
+  const locallyParsedOrder = parseNaturalPizzaOrder(text);
   const quickInterpretation = localInterpretation(text, initial.current_step);
   const interpretation =
-    quickInterpretation ||
+    (locallyParsedOrder && !locallyParsedOrder.address_query
+      ? ({
+          intent: "order",
+          query: text,
+          order: locallyParsedOrder,
+        } satisfies MessageInterpretation)
+      : quickInterpretation) ||
     (shouldInterpretMessage(initial.current_step, text)
       ? await interpretMessage(text, initial.current_step)
       : null);
@@ -401,7 +412,10 @@ export async function processBotMessage(
         tenant,
         addressSchema.parse(initial.context.address),
       );
-    if (naturalOrder?.service === "delivery" && naturalOrder.number) {
+    if (
+      naturalOrder?.service === "delivery" &&
+      (naturalOrder.address_query || naturalOrder.number)
+    ) {
       if (naturalOrder.postal_code) {
         const naturalCep = await lookupCep(
           tenant,
@@ -414,16 +428,22 @@ export async function processBotMessage(
           complement: naturalOrder.complement || "",
           neighborhood: naturalOrder.neighborhood || naturalCep.bairro,
           city: naturalOrder.city || naturalCep.localidade,
-          state: (naturalOrder.state || naturalCep.uf).toUpperCase(),
+          state:
+            normalizeBrazilianState(naturalOrder.state) ||
+            naturalCep.uf.toUpperCase(),
         });
-      } else if (naturalOrder.street) {
+      } else if (naturalOrder.address_query || naturalOrder.street) {
         naturalAddress = await lookupAddress(tenant, {
-          street: naturalOrder.street,
-          number: naturalOrder.number,
+          query:
+            naturalOrder.street && naturalOrder.number
+              ? undefined
+              : naturalOrder.address_query || undefined,
+          street: naturalOrder.street || undefined,
+          number: naturalOrder.number || undefined,
           complement: naturalOrder.complement || "",
           neighborhood: naturalOrder.neighborhood || undefined,
           city: naturalOrder.city || undefined,
-          state: naturalOrder.state?.toUpperCase(),
+          state: normalizeBrazilianState(naturalOrder.state),
         });
       }
       if (naturalAddress)
@@ -941,10 +961,12 @@ export async function processBotMessage(
       category?: string | null,
       size?: string | null,
     ) {
-      const wanted = normalizeText(flavor);
+      const wanted = normalizeCatalogTerm(flavor);
       let matches = products.filter((product) => {
-        const name = normalizeText(product.name);
-        const full = normalizeText(`${product.name} ${product.description}`);
+        const name = normalizeCatalogTerm(product.name);
+        const full = normalizeCatalogTerm(
+          `${product.name} ${product.description}`,
+        );
         return name === wanted || full === wanted || full.includes(wanted);
       });
       const categoryName = normalizeText(category || "");

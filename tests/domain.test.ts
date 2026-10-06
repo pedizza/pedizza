@@ -22,7 +22,11 @@ import {
   formatCategoryCatalog,
   WHATSAPP_TEXT_LIMIT,
 } from "@/lib/domain/catalog";
-import { formatAddress } from "@/lib/domain/address";
+import { formatAddress, normalizeBrazilianState } from "@/lib/domain/address";
+import {
+  normalizeCatalogTerm,
+  parseNaturalPizzaOrder,
+} from "@/lib/domain/natural-order";
 describe("domain invariants", () => {
   it("money stays in integer cents", () => {
     expect(splitPrice([5000, 7000], "proportional")).toBe(6000);
@@ -181,5 +185,28 @@ describe("domain invariants", () => {
         state: "SP",
       }),
     ).toBe("Rua Quinze de Novembro, nº 1395 - Jardim Bom Recanto - Mauá - SP");
+  });
+  it("extracts a complete half-and-half pizza order from speech", () => {
+    expect(
+      parseNaturalPizzaOrder(
+        "Eu gostaria de uma pizza meia-meia muçarela e calabresa com borda de catupiry para entregar na Rua 15 de Novembro, 1395, Jardim Bom Recanto, Mauá, São Paulo.",
+      ),
+    ).toMatchObject({
+      category: "pizza",
+      flavors: ["mucarela", "calabresa"],
+      border: "catupiry",
+      service: "delivery",
+      address_query:
+        "rua 15 de novembro, 1395, jardim bom recanto, maua, sao paulo",
+    });
+  });
+  it("matches common spelling variants of muçarela", () => {
+    expect(normalizeCatalogTerm("Mussarela")).toBe(
+      normalizeCatalogTerm("Muçarela"),
+    );
+  });
+  it("normalizes full Brazilian state names returned by language models", () => {
+    expect(normalizeBrazilianState("São Paulo")).toBe("SP");
+    expect(normalizeBrazilianState("sp")).toBe("SP");
   });
 });
