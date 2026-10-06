@@ -1,6 +1,6 @@
 {
   "name": "pedizza-gestor-de-pedidos",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Aplicativo de gestão em tempo real do Pedizza.",
   "author": "Pedizza",
   "private": true,
@@ -15,7 +15,7 @@
   },
   "build": {
     "appId": "br.com.pedizza.gestor",
-    "productName": "Pedizza Gestor de Pedidos",
+    "productName": "Pedizza",
     "copyright": "Copyright © 2026 Pedizza",
     "electronVersion": "44.5.1",
     "asar": true,
@@ -50,13 +50,9 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Pedizza Gestor de Pedidos",
+      "shortcutName": "Pedizza",
       "runAfterFinish": true,
       "deleteAppDataOnUninstall": false
     }
-  },
-  "devDependencies": {
-    "electron": "^44.5.1",
-    "electron-builder": "^26.15.3"
   }
 }

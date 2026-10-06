@@ -21,7 +21,7 @@ let mainWindow = null;
 let tray = null;
 let quitting = false;
 
-app.setName("Pedizza Gestor de Pedidos");
+app.setName("Pedizza");
 app.setAppUserModelId("br.com.pedizza.gestor");
 app.commandLine.appendSwitch("autoplay-policy", "no-user-gesture-required");
 
@@ -67,8 +67,8 @@ function createWindow() {
     minWidth: 1024,
     minHeight: 680,
     show: false,
-    backgroundColor: "#f7f8f5",
-    title: "Pedizza Gestor de Pedidos",
+    backgroundColor: "#f4f6f9",
+    title: "Pedizza",
     icon: iconPath,
     autoHideMenuBar: true,
     webPreferences: {
@@ -120,11 +120,11 @@ function createTray() {
     .createFromPath(iconPath)
     .resize({ width: 20, height: 20 });
   tray = new Tray(trayImage);
-  tray.setToolTip("Pedizza Gestor de Pedidos");
+  tray.setToolTip("Pedizza");
   tray.setContextMenu(
     Menu.buildFromTemplate([
       {
-        label: "Abrir Gestor de Pedidos",
+        label: "Abrir Pedizza",
         click: () => {
           mainWindow?.show();
           mainWindow?.focus();

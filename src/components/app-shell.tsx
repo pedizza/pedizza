@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
@@ -13,6 +13,8 @@ import {
   Bike,
   UserRoundCog,
   Settings,
+  Bell,
+  CreditCard,
   Menu,
   LogOut,
   ChevronDown,
@@ -33,6 +35,8 @@ const icons = {
   Bike,
   UserRoundCog,
   Settings,
+  Bell,
+  CreditCard,
 };
 export function AppShell({
   ctx,
@@ -44,6 +48,23 @@ export function AppShell({
   const path = usePathname();
   const router = useRouter();
   const [open, setOpen] = useState(false);
+  const menuTrigger = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setOpen(false);
+        menuTrigger.current?.focus();
+      }
+    };
+    document.addEventListener("keydown", escape);
+    return () => {
+      document.body.style.overflow = previous;
+      document.removeEventListener("keydown", escape);
+    };
+  }, [open]);
   const links = navigation.filter((n) =>
     ctx.permissions.includes(n.permission),
   );
@@ -89,6 +110,7 @@ export function AppShell({
                 href={n.href}
                 prefetch={false}
                 onClick={() => setOpen(false)}
+                aria-current={path.startsWith(n.href) ? "page" : undefined}
                 className={`nav-link ${path.startsWith(n.href) ? "active" : ""}`}
               >
                 <Icon size={18} />
@@ -96,6 +118,27 @@ export function AppShell({
               </Link>
             );
           })}
+        </nav>
+        <div className="nav-section-label">MINHA CONTA</div>
+        <nav className="nav-list account-nav" aria-label="Conta e notificações">
+          {ctx.permissions.includes("notifications.view") && (
+            <Link
+              href="/app/notificacoes"
+              onClick={() => setOpen(false)}
+              className={`nav-link ${path === "/app/notificacoes" ? "active" : ""}`}
+            >
+              <Bell size={18} /> Notificações
+            </Link>
+          )}
+          {ctx.permissions.includes("subscription.view") && (
+            <Link
+              href="/app/assinatura"
+              onClick={() => setOpen(false)}
+              className={`nav-link ${path === "/app/assinatura" ? "active" : ""}`}
+            >
+              <CreditCard size={18} /> Minha assinatura
+            </Link>
+          )}
         </nav>
         <div className="sidebar-user">
           <div className="row">
@@ -106,15 +149,6 @@ export function AppShell({
             </div>
           </div>
           <div className="row between" style={{ marginTop: 14 }}>
-            {ctx.permissions.includes("subscription.view") && (
-              <Link
-                href="/app/assinatura"
-                className="muted"
-                style={{ fontSize: 12 }}
-              >
-                Minha assinatura
-              </Link>
-            )}
             <form action={logout}>
               <button className="btn ghost small" aria-label="Sair da conta">
                 <LogOut size={15} />
@@ -128,6 +162,8 @@ export function AppShell({
         <header className="topbar">
           <div className="row">
             <button
+              ref={menuTrigger}
+              aria-expanded={open}
               className="icon-button mobile-menu-button"
               onClick={() => setOpen(true)}
               aria-label="Abrir menu"
@@ -135,9 +171,14 @@ export function AppShell({
               <Menu size={19} />
             </button>
             <span className="topbar-title desktop-only">
-              {current?.label || "Minha loja"}
+              {current?.label ||
+                (path === "/app/notificacoes"
+                  ? "Notificações"
+                  : path === "/app/assinatura"
+                    ? "Minha assinatura"
+                    : "Minha loja")}
             </span>
-            <span className="badge desktop-only">Seu espaço de gestão</span>
+            <span className="badge desktop-only">Painel da pizzaria</span>
           </div>
           <div className="row">
             <Store size={17} className="muted" />
@@ -181,7 +222,11 @@ export function AppShell({
             </Link>
           );
         })}
-        <button onClick={() => setOpen(true)}>
+        <button
+          aria-expanded={open}
+          aria-label="Todas as abas"
+          onClick={() => setOpen(true)}
+        >
           <Menu size={21} />
           <span>Mais</span>
         </button>

@@ -2,7 +2,13 @@
 import { useActionState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowRight, ShieldCheck } from "lucide-react";
+import {
+  ArrowRight,
+  ShieldCheck,
+  ClipboardList,
+  MessageCircle,
+  ChartNoAxesCombined,
+} from "lucide-react";
 import {
   login,
   resendVerification,
@@ -41,7 +47,7 @@ export function AuthForm({
   return (
     <div className="auth-wrap">
       <aside className="auth-story">
-        <span className="eyebrow">O PRÓXIMO PEDIDO COMEÇA AQUI</span>
+        <span className="eyebrow">GESTÃO FEITA PARA PIZZARIAS</span>
         <div>
           <Image
             src="/logo.png"
@@ -51,15 +57,26 @@ export function AuthForm({
             priority
           />
           <h1>
-            Mais organização.
+            Sua operação,
             <br />
-            Mais sabor no seu dia.
+            no ponto certo.
           </h1>
           <p className="muted">
             Sua equipe, seus clientes e seus pedidos.
             <br />
             Tudo junto para sua pizzaria ir mais longe.
           </p>
+        </div>
+        <div className="auth-capabilities">
+          <span>
+            <ClipboardList size={18} /> Pedidos organizados
+          </span>
+          <span>
+            <MessageCircle size={18} /> Atendimento conectado
+          </span>
+          <span>
+            <ChartNoAxesCombined size={18} /> Controle da operação
+          </span>
         </div>
         <div className="row muted">
           <ShieldCheck size={17} /> Um espaço seguro para sua loja.
