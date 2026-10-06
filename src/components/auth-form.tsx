@@ -1,12 +1,13 @@
 "use client";
 import { useActionState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import {
   ArrowRight,
   ShieldCheck,
   ClipboardList,
   MessageCircle,
-  ChartNoAxesCombined,
+  Bike,
 } from "lucide-react";
 import {
   login,
@@ -44,38 +45,58 @@ export function AuthForm({
     password: "Escolha sua nova senha.",
   }[mode];
   return (
-    <div className="auth-wrap">
-      <aside className="auth-story">
-        <span className="eyebrow">GESTÃO FEITA PARA PIZZARIAS</span>
-        <div>
+    <div className="auth-wrap auth-branded">
+      <aside className="auth-story auth-brand-panel">
+        <Link href="/" className="auth-brand" aria-label="Pedizza — início">
+          <Image
+            src="/logo.png"
+            alt="Pedizza"
+            width={180}
+            height={180}
+            preload
+          />
+        </Link>
+        <div className="auth-brand-copy">
+          <span className="eyebrow">DA PRIMEIRA MENSAGEM À ÚLTIMA ENTREGA</span>
           <h1>
-            Pedidos chegando.
+            Sua pizzaria.
             <br />
-            Sua loja no controle.
+            Seu ritmo.
+            <br />
+            <span>Tudo no controle.</span>
           </h1>
-          <p className="muted">
-            Do atendimento à entrega.
+          <p>
+            Mais tempo para fazer uma boa pizza.
             <br />
-            Tudo o que você precisa para operar sua pizzaria.
+            Menos trabalho para cuidar dos pedidos.
           </p>
         </div>
-        <div className="auth-capabilities">
+        <div
+          className="auth-operation"
+          aria-label="Atendimento, pedidos e entrega"
+        >
           <span>
-            <ClipboardList size={18} /> Pedidos organizados
+            <MessageCircle size={21} />
+            <strong>Atenda</strong>
           </span>
+          <ArrowRight size={16} aria-hidden="true" />
           <span>
-            <MessageCircle size={18} /> Atendimento conectado
+            <ClipboardList size={21} />
+            <strong>Prepare</strong>
           </span>
+          <ArrowRight size={16} aria-hidden="true" />
           <span>
-            <ChartNoAxesCombined size={18} /> Controle da operação
+            <Bike size={21} />
+            <strong>Entregue</strong>
           </span>
         </div>
-        <div className="row muted">
-          <ShieldCheck size={17} /> Um espaço seguro para sua loja.
-        </div>
+        <p className="auth-brand-footer">Feito para quem vive de pizza.</p>
       </aside>
       <section className="auth-content">
         <div className="auth-form">
+          <div className="auth-access-label">
+            <ShieldCheck size={16} /> SEU ESPAÇO DE GESTÃO
+          </div>
           <h1>{title}</h1>
           <p className="muted">
             {mode === "signup"
