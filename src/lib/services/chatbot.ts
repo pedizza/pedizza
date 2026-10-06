@@ -324,9 +324,16 @@ export async function processBotMessage(
       closed_message: string;
       delivery_enabled: boolean;
       pickup_enabled: boolean;
+      postal_code: string;
+      street: string;
+      number: string;
+      complement: string;
+      neighborhood: string;
+      city: string;
+      state: string;
     }>(
       db,
-      "select display_name,timezone,status_mode,welcome_message,closed_message,delivery_enabled,pickup_enabled from public.store_settings where tenant_id=$1",
+      "select display_name,timezone,status_mode,welcome_message,closed_message,delivery_enabled,pickup_enabled,postal_code,street,number,complement,neighborhood,city,state from public.store_settings where tenant_id=$1",
       [tenant],
     );
     const menu = mainMenu(store || undefined, customer || undefined);
@@ -508,7 +515,20 @@ export async function processBotMessage(
           : undefined,
       );
     }
-    async function continueAfterAddress() {
+    function pickupAddressMessage() {
+      if (!store) return undefined;
+      const address = formatAddress(store);
+      if (!address) return undefined;
+      const postalCode = store.postal_code.replace(/\D/g, "");
+      const formattedPostalCode = /^\d{8}$/.test(postalCode)
+        ? postalCode.replace(/^(\d{5})(\d{3})$/, "$1-$2")
+        : store.postal_code;
+      return joinBlocks(
+        "📍 *Endereço para retirada:*",
+        address + (formattedPostalCode ? `\nCEP: ${formattedPostalCode}` : ""),
+      );
+    }
+    async function continueAfterAddress(introduction?: string) {
       const cart = await one<{ has_items: boolean }>(
         db,
         "select exists(select 1 from public.cart_items where tenant_id=$1 and cart_id=$2) has_items",
@@ -517,7 +537,11 @@ export async function processBotMessage(
       context.page = 0;
       if (cart?.has_items) {
         step = "awaiting_payment";
-        reply = joinBlocks(prompts[step], await options("payment"));
+        reply = joinBlocks(
+          introduction,
+          prompts[step],
+          await options("payment"),
+        );
       } else {
         step = "awaiting_category";
         reply = joinBlocks(prompts[step], await options("category"));
@@ -754,7 +778,7 @@ export async function processBotMessage(
             );
             context.cartId = cart;
             context.address = undefined;
-            await continueAfterAddress();
+            await continueAfterAddress(pickupAddressMessage());
           } else if (isChoice(normalized, "2", "voltar", "voltar ao menu")) {
             step = "main_menu";
             reply = menu.text;
@@ -790,7 +814,7 @@ export async function processBotMessage(
             context.page = 0;
             reply = joinBlocks(prompts[step], await options("category"));
           } else if (deliveryChoice) await requestDeliveryAddress();
-          else await continueAfterAddress();
+          else await continueAfterAddress(pickupAddressMessage());
           break;
         case "awaiting_saved_address":
           if (
