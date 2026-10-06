@@ -11,7 +11,9 @@ import { enqueue } from "@/lib/services/events";
 export async function GET(request: Request) {
   try {
     const ctx = await requireTenant("conversations.view");
-    const id = z.uuid().parse(new URL(request.url).searchParams.get("id"));
+    const params = new URL(request.url).searchParams;
+    const id = z.uuid().parse(params.get("id"));
+    const inline = params.get("inline") === "1";
     const m = await transaction(
       (db) =>
         one<{ media_path: string | null; media_name: string | null }>(
@@ -35,7 +37,8 @@ export async function GET(request: Request) {
         "Content-Type": data.type,
         "Cache-Control": "private, no-store",
         "Content-Disposition":
-          "attachment; filename*=UTF-8\'\'" +
+          (inline ? "inline" : "attachment") +
+          "; filename*=UTF-8\'\'" +
           encodeURIComponent(m.media_name || "anexo"),
         "X-Content-Type-Options": "nosniff",
       },

@@ -1,17 +1,41 @@
 "use client";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { AudioRecorder } from "./audio-recorder";
 import { useSearchParams } from "next/navigation";
-import { Send, ArrowLeft } from "lucide-react";
+import {
+  Send,
+  ArrowLeft,
+  Ban,
+  Bot,
+  Check,
+  CheckCheck,
+  Download,
+  FileText,
+  MoreVertical,
+  Paperclip,
+  Search,
+  Trash2,
+  UserRound,
+  Volume2,
+} from "lucide-react";
 import type { Permission } from "@/lib/permissions";
 import { useRealtime } from "./realtime";
-import { PageHeader, EmptyState } from "./ui/states";
+import { EmptyState } from "./ui/states";
+import { ResponsiveModal } from "./ui/modal";
 type Conversation = {
   id: string;
   name: string;
   phone: string;
   status: string;
   bot_paused: boolean;
+  blocked: boolean;
+  last_message_at?: string | null;
   last_message_preview: string;
   unread_count: number;
 };
@@ -23,8 +47,77 @@ type Message = {
   status: string;
   created_at: string;
   media_path: string | null;
+  media_mime: string | null;
+  media_name: string | null;
   message_type: string;
 };
+function initials(name: string, phone: string) {
+  const words = (name?.trim() || phone).split(/\s+/).filter(Boolean);
+  return ((words[0]?.[0] || "C") + (words[1]?.[0] || "")).toUpperCase();
+}
+function listTime(value?: string | null) {
+  if (!value) return "";
+  const date = new Date(value);
+  return date.toDateString() === new Date().toDateString()
+    ? date.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
+    : date.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
+}
+function MessageStatus({ status }: { status: string }) {
+  if (status === "read" || status === "delivered")
+    return (
+      <CheckCheck
+        size={15}
+        aria-label={status === "read" ? "Lida" : "Entregue"}
+      />
+    );
+  if (status === "sent") return <Check size={15} aria-label="Enviada" />;
+  return null;
+}
+function MessageMedia({ message }: { message: Message }) {
+  if (!message.media_path) return null;
+  const source = `/api/media?id=${message.id}&inline=1`;
+  const mime = message.media_mime || "";
+  if (mime.startsWith("audio/") || message.message_type === "audio")
+    return (
+      <div className="conversation-audio">
+        <Volume2 size={18} aria-hidden="true" />
+        <audio controls preload="metadata" src={source}>
+          Seu navegador não consegue reproduzir este áudio.
+        </audio>
+      </div>
+    );
+  if (mime.startsWith("image/") || message.message_type === "image")
+    return (
+      <a
+        href={source}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="conversation-image"
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element -- mídia autenticada */}
+        <img src={source} alt={message.media_name || "Imagem da conversa"} />
+      </a>
+    );
+  if (mime.startsWith("video/") || message.message_type === "video")
+    return (
+      <video
+        controls
+        preload="metadata"
+        src={source}
+        className="conversation-video"
+      />
+    );
+  return (
+    <a href={`/api/media?id=${message.id}`} className="conversation-file">
+      {mime === "application/pdf" ? (
+        <FileText size={22} />
+      ) : (
+        <Download size={22} />
+      )}
+      <span>{message.media_name || "Baixar anexo"}</span>
+    </a>
+  );
+}
 export function Conversations({
   tenantId,
   permissions,
@@ -48,8 +141,15 @@ export function Conversations({
     [error, setError] = useState(""),
     [listError, setListError] = useState(""),
     [detailError, setDetailError] = useState(""),
-    [listLoaded, setListLoaded] = useState(false);
+    [listLoaded, setListLoaded] = useState(false),
+    [menuOpen, setMenuOpen] = useState(false),
+    [confirmAction, setConfirmAction] = useState<
+      "archive" | "block" | "unblock" | null
+    >(null);
   const messageKey = useRef(crypto.randomUUID());
+  const messagesEnd = useRef<HTMLDivElement>(null);
+  const lastNewestId = useRef("");
+  const lastSelected = useRef("");
   const loadList = useCallback(
     () =>
       fetch(
@@ -98,13 +198,26 @@ export function Conversations({
   useEffect(() => {
     void loadDetail();
   }, [loadDetail]);
-  useRealtime(tenantId, "conversations", loadList);
+  useRealtime(tenantId, "conversations", loadList, undefined, 2500);
   useRealtime(
     tenantId,
     "conversation_messages",
     loadDetail,
     selected ? `conversation_id=eq.${selected}` : undefined,
+    1500,
   );
+  const newestId = messages.at(-1)?.id || "";
+  useLayoutEffect(() => {
+    if (!newestId) return;
+    const conversationChanged = lastSelected.current !== selected;
+    if (conversationChanged || lastNewestId.current !== newestId)
+      messagesEnd.current?.scrollIntoView({
+        block: "end",
+        behavior: conversationChanged ? "auto" : "smooth",
+      });
+    lastSelected.current = selected;
+    lastNewestId.current = newestId;
+  }, [newestId, selected]);
   async function upload(file: File) {
     setBusy(true);
     setError("");
@@ -143,7 +256,16 @@ export function Conversations({
         setText("");
         messageKey.current = crypto.randomUUID();
       }
-      await Promise.all([loadList(), loadDetail()]);
+      if (action === "archive") {
+        setSelected("");
+        setDetail(null);
+        setMessages([]);
+        await loadList();
+      } else {
+        await Promise.all([loadList(), loadDetail()]);
+      }
+      setConfirmAction(null);
+      setMenuOpen(false);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Tente novamente.");
     } finally {
@@ -156,14 +278,12 @@ export function Conversations({
     setMessages([]);
     setDetail(c);
     setText("");
+    setMenuOpen(false);
+    lastNewestId.current = "";
     messageKey.current = crypto.randomUUID();
   }
   return (
     <>
-      <PageHeader
-        title="Conversas"
-        description="Atenda seus clientes e acompanhe o assistente de pedidos."
-      />
       {error && (
         <p className="alert error" role="alert">
           {error}
@@ -182,16 +302,23 @@ export function Conversations({
       )}
       <div className={`conversation-layout ${selected ? "has-selection" : ""}`}>
         <aside className="conversation-list card">
-          <div className="stack" style={{ padding: 16 }}>
-            <input
-              aria-label="Buscar conversa"
-              placeholder="Buscar nome ou telefone"
-              value={q}
-              onChange={(e) => {
-                setQ(e.target.value);
-                setPage(1);
-              }}
-            />
+          <div className="conversation-list-head">
+            <strong>Conversas</strong>
+            <span>{total}</span>
+          </div>
+          <div className="conversation-controls">
+            <label className="conversation-search">
+              <Search size={17} aria-hidden="true" />
+              <input
+                aria-label="Buscar conversa"
+                placeholder="Buscar"
+                value={q}
+                onChange={(e) => {
+                  setQ(e.target.value);
+                  setPage(1);
+                }}
+              />
+            </label>
             <select
               aria-label="Filtrar atendimento"
               value={status}
@@ -201,42 +328,54 @@ export function Conversations({
               }}
             >
               <option value="all">Todas</option>
-              <option value="waiting_human">Aguardando equipe</option>
-              <option value="human">Em atendimento</option>
-              <option value="bot">Assistente ativo</option>
+              <option value="waiting_human">Aguardando</option>
+              <option value="human">Equipe</option>
+              <option value="bot">Assistente</option>
               <option value="closed">Finalizadas</option>
             </select>
           </div>
-          {!listLoaded && !listError && (
-            <p role="status" style={{ padding: 16 }}>
-              Carregando conversas…
-            </p>
-          )}
-          {listLoaded && !listError && list.length === 0 && (
-            <EmptyState
-              title="Nenhuma conversa"
-              description="Mensagens recebidas pelo WhatsApp aparecerão aqui."
-            />
-          )}
-          {list.map((c) => (
-            <button
-              key={c.id}
-              className={`conversation-item ${c.id === selected ? "active" : ""}`}
-              onClick={() => select(c)}
-            >
-              <div className="row between">
-                <strong>{c.name || c.phone}</strong>
-                {c.unread_count > 0 && (
-                  <span className="badge">{c.unread_count}</span>
-                )}
-              </div>
-              <p>{c.last_message_preview || "Nova conversa"}</p>
-              <small>
-                {c.bot_paused ? "Atendimento humano" : "Assistente ativo"}
-              </small>
-            </button>
-          ))}
-          <div className="row between" style={{ padding: 12 }}>
+          <div className="conversation-items">
+            {!listLoaded && !listError && (
+              <p role="status" className="conversation-loading">
+                Carregando…
+              </p>
+            )}
+            {listLoaded && !listError && list.length === 0 && (
+              <EmptyState
+                title="Nenhuma conversa"
+                description="Mensagens recebidas pelo WhatsApp aparecerão aqui."
+              />
+            )}
+            {list.map((c) => (
+              <button
+                key={c.id}
+                className={`conversation-item ${c.id === selected ? "active" : ""}`}
+                onClick={() => select(c)}
+              >
+                <span className="conversation-avatar">
+                  {initials(c.name, c.phone)}
+                </span>
+                <span className="conversation-item-content">
+                  <span className="conversation-item-top">
+                    <strong>{c.name || c.phone}</strong>
+                    <time>{listTime(c.last_message_at)}</time>
+                  </span>
+                  <span className="conversation-item-bottom">
+                    <span>{c.last_message_preview || "Nova conversa"}</span>
+                    {c.unread_count > 0 && <b>{c.unread_count}</b>}
+                  </span>
+                  <small>
+                    {c.blocked
+                      ? "Cliente bloqueado"
+                      : c.bot_paused
+                        ? "Atendimento humano"
+                        : "Assistente ativo"}
+                  </small>
+                </span>
+              </button>
+            ))}
+          </div>
+          <div className="conversation-pagination">
             <button
               className="btn ghost small"
               disabled={page === 1}
@@ -255,189 +394,237 @@ export function Conversations({
         </aside>
         <section className="conversation-detail card">
           {!selected || !detail ? (
-            <EmptyState
-              title="Selecione uma conversa"
-              description="O histórico e as ações de atendimento ficam neste espaço."
-            />
+            <div className="conversation-empty">
+              <div className="conversation-empty-icon">
+                <Bot size={28} />
+              </div>
+              <h2>Pedizza Conversas</h2>
+              <p>Selecione uma conversa para atender seus clientes.</p>
+            </div>
           ) : (
             <>
-              <header
-                className="stack"
-                style={{ padding: 16, borderBottom: "1px solid var(--border)" }}
-              >
-                <div className="row">
-                  <button
-                    className="icon-button"
-                    onClick={() => setSelected("")}
-                    aria-label="Voltar à lista"
-                  >
-                    <ArrowLeft size={18} />
-                  </button>
-                  <div>
-                    <strong>{detail.name || detail.phone}</strong>
-                    <small className="muted"> {detail.phone}</small>
-                  </div>
-                  <span className="badge">
-                    {detail.bot_paused ? "Equipe" : "Assistente"}
+              <header className="conversation-chat-head">
+                <button
+                  className="icon-button conversation-back"
+                  onClick={() => setSelected("")}
+                  aria-label="Voltar à lista"
+                >
+                  <ArrowLeft size={18} />
+                </button>
+                <span className="conversation-avatar">
+                  {initials(detail.name, detail.phone)}
+                </span>
+                <div className="conversation-contact">
+                  <strong>{detail.name || detail.phone}</strong>
+                  <span>
+                    {detail.phone} ·{" "}
+                    {detail.blocked
+                      ? "Bloqueado"
+                      : detail.bot_paused
+                        ? "Equipe atendendo"
+                        : "Assistente ativo"}
                   </span>
                 </div>
-                <div className="row" style={{ flexWrap: "wrap" }}>
-                  {permissions.includes("conversations.assign") && (
-                    <button
-                      className="btn secondary small"
-                      disabled={busy}
-                      onClick={() => action("take")}
-                    >
-                      Assumir atendimento
-                    </button>
-                  )}
+                <div className="conversation-head-actions">
+                  {permissions.includes("conversations.assign") &&
+                    !detail.blocked && (
+                      <button
+                        className="btn secondary small"
+                        disabled={busy}
+                        onClick={() => action("take")}
+                      >
+                        <UserRound size={16} /> Assumir
+                      </button>
+                    )}
                   {permissions.includes("conversations.resume_bot") &&
-                    detail.bot_paused && (
+                    detail.bot_paused &&
+                    !detail.blocked && (
                       <button
                         className="btn secondary small"
                         disabled={busy}
                         onClick={() => action("resume")}
                       >
-                        Retomar assistente
+                        <Bot size={16} /> Retomar
                       </button>
                     )}
-                  <button
-                    className="btn ghost small"
-                    disabled={busy}
-                    onClick={() => action("read")}
-                  >
-                    Marcar lida
-                  </button>
-                  {permissions.includes("conversations.archive") && (
+                  <div className="conversation-menu-wrap">
                     <button
-                      className="btn ghost small"
-                      disabled={busy}
-                      onClick={() => action("close")}
+                      className="icon-button"
+                      onClick={() => setMenuOpen((value) => !value)}
+                      aria-label="Mais opções"
+                      aria-expanded={menuOpen}
                     >
-                      Finalizar
+                      <MoreVertical size={20} />
                     </button>
-                  )}
+                    {menuOpen && (
+                      <div className="conversation-menu">
+                        <button disabled={busy} onClick={() => action("read")}>
+                          <CheckCheck size={17} /> Marcar como lida
+                        </button>
+                        {permissions.includes("customers.edit") && (
+                          <button
+                            onClick={() =>
+                              setConfirmAction(
+                                detail.blocked ? "unblock" : "block",
+                              )
+                            }
+                          >
+                            <Ban size={17} />{" "}
+                            {detail.blocked
+                              ? "Desbloquear cliente"
+                              : "Bloquear cliente"}
+                          </button>
+                        )}
+                        {permissions.includes("conversations.archive") && (
+                          <button
+                            className="danger"
+                            onClick={() => setConfirmAction("archive")}
+                          >
+                            <Trash2 size={17} /> Excluir conversa
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </header>
               <div className="conversation-messages">
-                <div className="row between">
+                {hasMore && (
                   <button
-                    className="btn ghost small"
-                    disabled={!hasMore}
+                    className="conversation-history-button"
                     onClick={() => setHistoryPage((p) => p + 1)}
                   >
-                    Mensagens anteriores
+                    Carregar mensagens anteriores
                   </button>
-                  {historyPage > 1 && (
-                    <button
-                      className="btn ghost small"
-                      onClick={() => setHistoryPage((p) => p - 1)}
-                    >
-                      Mais recentes
-                    </button>
-                  )}
-                </div>
+                )}
                 {messages.map((m) => (
                   <article
                     className={`message-bubble ${m.direction}`}
                     key={m.id}
                   >
-                    <small className="muted">
-                      {m.sender_type === "customer"
-                        ? "Cliente"
-                        : m.sender_type === "bot"
-                          ? "Assistente"
-                          : m.sender_type === "system"
-                            ? "Sistema"
-                            : "Equipe"}
-                    </small>
-                    <p
-                      style={{
-                        whiteSpace: "pre-wrap",
-                        overflowWrap: "anywhere",
-                      }}
-                    >
-                      {m.body}
-                    </p>
-                    {m.media_path && (
-                      <a
-                        href={`/api/media?id=${m.id}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="btn secondary small"
-                      >
-                        Abrir anexo
-                      </a>
-                    )}
-                    <small className="muted">
-                      {new Date(m.created_at).toLocaleString("pt-BR")} ·{" "}
-                      {(
-                        {
-                          pending: "Pendente",
-                          sent: "Enviada",
-                          delivered: "Entregue",
-                          read: "Lida",
-                          failed: "Falha no envio",
-                        } as Record<string, string>
-                      )[m.status] || m.status}
-                    </small>
+                    <MessageMedia message={m} />
+                    {m.body && <p>{m.body}</p>}
+                    <span className="message-meta">
+                      {new Date(m.created_at).toLocaleTimeString("pt-BR", {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                      {m.direction === "outbound" && (
+                        <MessageStatus status={m.status} />
+                      )}
+                    </span>
                     {m.status === "failed" && (
-                      <p>Confira a conexão e o WhatsApp antes de reenviar.</p>
+                      <small className="message-failed">Falha no envio</small>
                     )}
                   </article>
                 ))}
+                <div ref={messagesEnd} aria-hidden="true" />
               </div>
-              {permissions.includes("conversations.send") && (
-                <form
-                  className="row"
-                  style={{ padding: 16, borderTop: "1px solid var(--border)" }}
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    void action("send");
-                  }}
-                >
-                  <label className="btn secondary small">
-                    Anexar
-                    <input
-                      aria-label="Anexar arquivo de até 3 MB"
-                      type="file"
-                      accept="image/jpeg,image/png,image/webp,application/pdf,audio/mpeg,audio/ogg,audio/wav,video/mp4"
+              {permissions.includes("conversations.send") &&
+                !detail.blocked && (
+                  <form
+                    className="conversation-composer"
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      void action("send");
+                    }}
+                  >
+                    <label className="icon-button conversation-attach">
+                      <Paperclip size={21} />
+                      <input
+                        aria-label="Anexar arquivo de até 3 MB"
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp,application/pdf,audio/mpeg,audio/ogg,audio/wav,audio/webm,audio/mp4,video/mp4"
+                        disabled={busy}
+                        hidden
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) void upload(file);
+                          e.target.value = "";
+                        }}
+                      />
+                    </label>
+                    <AudioRecorder
+                      key={selected}
                       disabled={busy}
-                      hidden
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) void upload(file);
-                        e.target.value = "";
+                      onRecorded={upload}
+                    />
+                    <textarea
+                      aria-label="Mensagem"
+                      placeholder="Digite uma mensagem"
+                      maxLength={10000}
+                      value={text}
+                      onChange={(e) => setText(e.target.value)}
+                      rows={1}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" && !event.shiftKey) {
+                          event.preventDefault();
+                          if (text.trim() && !busy) void action("send");
+                        }
                       }}
                     />
-                  </label>
-                  <AudioRecorder
-                    key={selected}
-                    disabled={busy}
-                    onRecorded={upload}
-                  />
-                  <textarea
-                    aria-label="Sua mensagem"
-                    placeholder="Digite uma mensagem. O envio pausa o assistente."
-                    maxLength={10000}
-                    value={text}
-                    onChange={(e) => setText(e.target.value)}
-                    rows={2}
-                    style={{ flex: 1 }}
-                  />
-                  <button
-                    className="btn primary"
-                    disabled={busy || !text.trim()}
-                    aria-label="Enviar mensagem"
-                  >
-                    <Send size={18} />
-                  </button>
-                </form>
+                    <button
+                      className="conversation-send"
+                      disabled={busy || !text.trim()}
+                      aria-label="Enviar mensagem"
+                    >
+                      <Send size={20} />
+                    </button>
+                  </form>
+                )}
+              {detail.blocked && (
+                <div className="conversation-blocked">
+                  <Ban size={17} /> Cliente bloqueado. Desbloqueie para
+                  responder.
+                </div>
               )}
             </>
           )}
         </section>
       </div>
+      <ResponsiveModal
+        open={confirmAction !== null}
+        title={
+          confirmAction === "archive"
+            ? "Excluir conversa"
+            : confirmAction === "unblock"
+              ? "Desbloquear cliente"
+              : "Bloquear cliente"
+        }
+        onClose={() => setConfirmAction(null)}
+      >
+        <div className="stack">
+          <p>
+            {confirmAction === "archive"
+              ? "A conversa será removida desta caixa de entrada."
+              : confirmAction === "unblock"
+                ? "O cliente poderá voltar a conversar com a loja e receber respostas."
+                : "O cliente deixará de receber respostas automáticas e da equipe até ser desbloqueado."}
+          </p>
+          <div className="row" style={{ justifyContent: "flex-end" }}>
+            <button
+              className="btn secondary"
+              disabled={busy}
+              onClick={() => setConfirmAction(null)}
+            >
+              Cancelar
+            </button>
+            <button
+              className="btn primary"
+              disabled={busy || !confirmAction}
+              onClick={() => confirmAction && void action(confirmAction)}
+            >
+              {busy
+                ? "Aguarde…"
+                : confirmAction === "archive"
+                  ? "Excluir conversa"
+                  : confirmAction === "unblock"
+                    ? "Desbloquear"
+                    : "Bloquear"}
+            </button>
+          </div>
+        </div>
+      </ResponsiveModal>
     </>
   );
 }

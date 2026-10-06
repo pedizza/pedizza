@@ -29,19 +29,22 @@ export async function GET(request: Request) {
           z.uuid().parse(id);
           const conversation = await one(
             db,
-            "select c.id,c.customer_id,c.status,c.bot_paused,c.assigned_user_id,c.unread_count,c.archived_at,u.name,u.phone from public.conversations c join public.customers u on u.tenant_id=c.tenant_id and u.id=c.customer_id where c.tenant_id=$1 and c.id=$2",
+            "select c.id,c.customer_id,c.status,c.bot_paused,c.assigned_user_id,c.unread_count,c.archived_at,u.name,u.phone,u.blocked from public.conversations c join public.customers u on u.tenant_id=c.tenant_id and u.id=c.customer_id where c.tenant_id=$1 and c.id=$2",
             [ctx.tenantId, id],
           );
           invariant(conversation, "Conversa não encontrada.", 404);
-          const messages = await rows(
+          const limit = Math.min(page * 40, 400);
+          const result = await rows(
             db,
-            "select id,direction,sender_type,message_type,body,status,media_path,media_mime,media_name,created_at from public.conversation_messages where tenant_id=$1 and conversation_id=$2 order by created_at desc,id desc limit 40 offset $3",
-            [ctx.tenantId, id, (page - 1) * 40],
+            "select id,direction,sender_type,message_type,body,status,media_path,media_mime,media_name,created_at from public.conversation_messages where tenant_id=$1 and conversation_id=$2 order by created_at desc,id desc limit $3",
+            [ctx.tenantId, id, limit + 1],
           );
+          const hasMore = result.length > limit;
+          const messages = result.slice(0, limit).reverse();
           return {
             conversation,
-            messages: messages.reverse(),
-            hasMore: messages.length === 40,
+            messages,
+            hasMore,
           };
         }
         const q = (u.searchParams.get("q") || "").slice(0, 120),
@@ -54,7 +57,7 @@ export async function GET(request: Request) {
         return {
           data: await rows(
             db,
-            `select c.id,c.status,c.bot_paused,c.last_message_preview,c.last_message_at,c.unread_count,u.name,u.phone from public.conversations c join public.customers u on u.tenant_id=c.tenant_id and u.id=c.customer_id where ${where} order by c.last_message_at desc nulls last,c.id limit 20 offset $4`,
+            `select c.id,c.status,c.bot_paused,c.last_message_preview,c.last_message_at,c.unread_count,u.name,u.phone,u.blocked from public.conversations c join public.customers u on u.tenant_id=c.tenant_id and u.id=c.customer_id where ${where} order by c.last_message_at desc nulls last,c.id limit 20 offset $4`,
             [...args, (page - 1) * 20],
           ),
           ...(await one(
@@ -77,7 +80,15 @@ const schema = z.discriminatedUnion("action", [
     text: z.string().trim().min(1).max(10000),
   }),
   z.object({
-    action: z.enum(["read", "take", "resume", "close", "archive"]),
+    action: z.enum([
+      "read",
+      "take",
+      "resume",
+      "close",
+      "archive",
+      "block",
+      "unblock",
+    ]),
     id: z.uuid(),
   }),
 ]);
@@ -96,12 +107,14 @@ export async function POST(request: Request) {
             ? "conversations.resume_bot"
             : d.action === "read"
               ? "conversations.view"
-              : "conversations.archive";
+              : d.action === "block" || d.action === "unblock"
+                ? "customers.edit"
+                : "conversations.archive";
     await transaction(async (db) => {
       await authorize(db, ctx, permission);
-      const conv = await one(
+      const conv = await one<{ id: string; customer_id: string }>(
         db,
-        "select id from public.conversations where tenant_id=$1 and id=$2 for update",
+        "select id,customer_id from public.conversations where tenant_id=$1 and id=$2 for update",
         [ctx.tenantId, d.id],
       );
       invariant(conv, "Conversa não encontrada.", 404);
@@ -113,6 +126,26 @@ export async function POST(request: Request) {
         await db.query(
           "update public.conversation_messages set read_at=coalesce(read_at,now()) where tenant_id=$1 and conversation_id=$2 and direction='inbound'",
           [ctx.tenantId, d.id],
+        );
+        return;
+      }
+      if (d.action === "block" || d.action === "unblock") {
+        const blocked = d.action === "block";
+        await db.query(
+          "update public.customers set blocked=$3 where tenant_id=$1 and id=$2",
+          [ctx.tenantId, conv.customer_id, blocked],
+        );
+        await db.query(
+          "update public.conversations set status=case when $3 then 'closed' else 'bot' end,bot_paused=$3,bot_epoch=bot_epoch+1,version=version+1,assigned_user_id=null where tenant_id=$1 and id=$2",
+          [ctx.tenantId, d.id, blocked],
+        );
+        await audit(
+          db,
+          ctx.tenantId,
+          ctx.userId,
+          "customer." + d.action,
+          "customers",
+          conv.customer_id,
         );
         return;
       }
