@@ -90,7 +90,7 @@ const prompts: Record<string, string> = {
   awaiting_observation:
     "Alguma observação?\n\nDigite 0️⃣ para continuar sem observação.",
   cart_menu:
-    "Como deseja continuar?\n\n1️⃣ Adicionar mais itens\n2️⃣ Finalizar\n3️⃣ Aplicar cupom\n4️⃣ Remover item",
+    "1️⃣ Adicionar mais itens\n2️⃣ Finalizar\n3️⃣ Aplicar cupom\n4️⃣ Remover item",
   awaiting_remove: "Digite o número ou o nome do item para remover.",
   awaiting_coupon:
     "Digite o código do cupom.\n\nDigite 0️⃣ para remover o cupom.",
@@ -98,8 +98,12 @@ const prompts: Record<string, string> = {
   awaiting_change:
     "Precisa de troco?\n\nInforme o valor (ex.: 100,00) ou digite 0️⃣ para continuar sem troco.",
   awaiting_final_confirmation:
-    "Confirme seu pedido:\n\n1️⃣ CONFIRMAR PEDIDO\n2️⃣ Voltar ao carrinho",
+    "1️⃣ CONFIRMAR PEDIDO\n2️⃣ Adicionar mais itens\n3️⃣ Trocar meu pedido",
 };
+
+function cartMenuMessage(summary: string) {
+  return joinBlocks("Anotei o seu pedido! 📝", summary, prompts.cart_menu);
+}
 
 function mainMenu(store?: { display_name: string; welcome_message: string }) {
   const storeName = store?.display_name.trim() || "nossa pizzaria";
@@ -470,6 +474,38 @@ export async function processBotMessage(
         reply = joinBlocks(prompts[step], await options("category"));
       }
     }
+    async function buildFinalConfirmation(summary: string) {
+      const cart = await one<{
+        service_type: string;
+        payment_name: string;
+        payment_type: string;
+        change_for_cents: number | null;
+      }>(
+        db,
+        `select c.service_type,pm.name payment_name,pm.type payment_type,c.change_for_cents
+         from public.carts c
+         join public.payment_methods pm on pm.tenant_id=c.tenant_id and pm.id=c.payment_method_id
+         where c.tenant_id=$1 and c.id=$2 and c.status='active'`,
+        [tenant, context.cartId],
+      );
+      invariant(cart, "Carrinho indisponível.");
+      const payment =
+        `Pagamento: ${cart.payment_name}` +
+        (cart.payment_type === "cash"
+          ? cart.change_for_cents
+            ? ` · Troco para ${formatCurrency(cart.change_for_cents)}`
+            : " · Sem troco"
+          : "");
+      const fulfillment =
+        cart.service_type === "delivery" && context.address
+          ? `Endereço: ${formatAddress(context.address)}`
+          : "Retirada no local";
+      return joinBlocks(
+        "Confirme se o pedido está correto, por gentileza? 😊",
+        [summary, payment, fulfillment].join("\n"),
+        prompts.awaiting_final_confirmation,
+      );
+    }
     if (
       normalized === "atendente" ||
       normalized === "humano" ||
@@ -558,7 +594,7 @@ export async function processBotMessage(
     } else if (normalized === "carrinho" && context.cartId) {
       const summary = await cartSummary(db, tenant, context.cartId);
       step = "cart_menu";
-      reply = joinBlocks(summary.text, prompts.cart_menu);
+      reply = cartMenuMessage(summary.text);
     } else if (normalized === "voltar") {
       step = context.previousStep || "main_menu";
       context.page = 0;
@@ -1049,7 +1085,7 @@ export async function processBotMessage(
           );
           const summary = await cartSummary(db, tenant, context.cartId);
           step = "cart_menu";
-          reply = joinBlocks(summary.text, prompts[step]);
+          reply = cartMenuMessage(summary.text);
           break;
         case "cart_menu":
           if (
@@ -1090,11 +1126,18 @@ export async function processBotMessage(
             "delete from public.cart_items where tenant_id=$1 and id=$2",
             [tenant, itemToRemove.id],
           );
-          step = items.length > 1 ? "cart_menu" : "awaiting_category";
-          reply = joinBlocks(
-            prompts[step],
-            items.length === 1 ? await options("category") : undefined,
-          );
+          if (items.length > 1) {
+            const updatedSummary = await cartSummary(
+              db,
+              tenant,
+              context.cartId!,
+            );
+            step = "cart_menu";
+            reply = cartMenuMessage(updatedSummary.text);
+          } else {
+            step = "awaiting_category";
+            reply = joinBlocks(prompts[step], await options("category"));
+          }
           break;
         case "awaiting_coupon":
           await db.query(
@@ -1115,7 +1158,7 @@ export async function processBotMessage(
           );
           const couponSummary = await cartSummary(db, tenant, context.cartId!);
           step = "cart_menu";
-          reply = joinBlocks(couponSummary.text, prompts[step]);
+          reply = cartMenuMessage(couponSummary.text);
           break;
         case "awaiting_payment":
           if (!selected()) {
@@ -1142,14 +1185,7 @@ export async function processBotMessage(
             const final = await cartSummary(db, tenant, context.cartId!);
             context.quoteHash = final.quote.hash;
             step = "awaiting_final_confirmation";
-            reply = joinBlocks(
-              final.text,
-              `Pagamento: ${method.name}`,
-              context.address
-                ? `Endereço: ${formatAddress(context.address)}`
-                : "Retirada no local",
-              prompts[step],
-            );
+            reply = await buildFinalConfirmation(final.text);
           }
           break;
         case "awaiting_email":
@@ -1164,14 +1200,7 @@ export async function processBotMessage(
           const emailQuote = await cartSummary(db, tenant, context.cartId!);
           context.quoteHash = emailQuote.quote.hash;
           step = "awaiting_final_confirmation";
-          reply = joinBlocks(
-            emailQuote.text,
-            "Pagamento: PIX Mercado Pago",
-            context.address
-              ? `Endereço: ${formatAddress(context.address)}`
-              : "Retirada no local",
-            prompts[step],
-          );
+          reply = await buildFinalConfirmation(emailQuote.text);
           break;
         case "awaiting_change":
           const change = isChoice(
@@ -1194,30 +1223,55 @@ export async function processBotMessage(
           );
           context.quoteHash = changeQuote.quote.hash;
           step = "awaiting_final_confirmation";
-          reply = joinBlocks(
-            changeQuote.text,
-            "Pagamento: Dinheiro" +
-              (change
-                ? " · Troco para " + formatCurrency(change)
-                : " · Sem troco"),
-            context.address
-              ? `Endereço: ${formatAddress(context.address)}`
-              : "Retirada no local",
-            prompts[step],
-          );
+          reply = await buildFinalConfirmation(changeQuote.text);
           break;
         case "awaiting_final_confirmation":
           if (
             isChoice(
               normalized,
               "2",
-              "voltar",
-              "voltar ao carrinho",
-              "carrinho",
+              "adicionar mais itens",
+              "adicionar item",
+              "mais itens",
             )
           ) {
-            step = "cart_menu";
-            reply = prompts[step];
+            context.quoteHash = undefined;
+            context.page = 0;
+            step = "awaiting_category";
+            reply = joinBlocks(prompts[step], await options("category"));
+          } else if (
+            isChoice(
+              normalized,
+              "3",
+              "trocar meu pedido",
+              "trocar pedido",
+              "refazer pedido",
+            )
+          ) {
+            await db.query(
+              "delete from public.cart_items where tenant_id=$1 and cart_id=$2",
+              [tenant, context.cartId],
+            );
+            await db.query(
+              "update public.carts set service_type='pickup',address_snapshot=null,delivery_fee_cents=0,distance_meters=null,payment_method_id=null,change_for_cents=null,coupon_code=null where tenant_id=$1 and id=$2 and status='active'",
+              [tenant, context.cartId],
+            );
+            context.address = undefined;
+            context.categoryId = undefined;
+            context.categoryName = undefined;
+            context.secondCategoryId = undefined;
+            context.secondCategoryName = undefined;
+            context.productIds = undefined;
+            context.sizeId = undefined;
+            context.borderId = undefined;
+            context.quoteHash = undefined;
+            context.page = 0;
+            step = "awaiting_category";
+            reply = joinBlocks(
+              "Vamos montar seu pedido novamente. 🍕",
+              prompts[step],
+              await options("category"),
+            );
           } else if (
             isChoice(normalized, "1", "confirmar", "confirmar pedido")
           ) {
@@ -1235,9 +1289,8 @@ export async function processBotMessage(
             if (current.quote.hash !== context.quoteHash) {
               context.quoteHash = current.quote.hash;
               reply = joinBlocks(
-                "Os valores foram atualizados. Confira antes de confirmar:",
-                current.text,
-                prompts[step],
+                "Os valores foram atualizados.",
+                await buildFinalConfirmation(current.text),
               );
               break;
             }
