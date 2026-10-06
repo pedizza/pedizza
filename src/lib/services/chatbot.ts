@@ -336,6 +336,10 @@ export async function processBotMessage(
         ...extractedOrder,
         category:
           extractedOrder.category ||
+          (initial.current_step === "awaiting_product" ||
+          initial.context.previousStep === "awaiting_product"
+            ? initial.context.categoryName || null
+            : null) ||
           (normalized.includes("broto")
             ? "broto"
             : normalized.includes("pizza")
@@ -962,13 +966,18 @@ export async function processBotMessage(
       size?: string | null,
     ) {
       const wanted = normalizeCatalogTerm(flavor);
-      let matches = products.filter((product) => {
-        const name = normalizeCatalogTerm(product.name);
-        const full = normalizeCatalogTerm(
-          `${product.name} ${product.description}`,
-        );
-        return name === wanted || full === wanted || full.includes(wanted);
-      });
+      const exactMatches = products.filter(
+        (product) => normalizeCatalogTerm(product.name) === wanted,
+      );
+      let matches = (exactMatches.length ? exactMatches : products).filter(
+        (product) => {
+          const name = normalizeCatalogTerm(product.name);
+          const full = normalizeCatalogTerm(
+            `${product.name} ${product.description}`,
+          );
+          return name === wanted || full === wanted || full.includes(wanted);
+        },
+      );
       const categoryName = normalizeText(category || "");
       if (categoryName) {
         matches = matches.filter((product) => {

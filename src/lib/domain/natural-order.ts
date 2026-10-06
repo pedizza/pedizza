@@ -19,7 +19,7 @@ export type LocallyParsedOrder = {
 
 function cleanPart(value: string) {
   return value
-    .replace(/^(?:de|do sabor|sabor de)\s+/, "")
+    .replace(/^(?:(?:de\s+)?meia(?:\s+de)?|de|do sabor|sabor de)\s+/, "")
     .replace(/[,.!?]+$/g, "")
     .trim();
 }
@@ -33,9 +33,14 @@ export function parseNaturalPizzaOrder(
 ): LocallyParsedOrder | null {
   const input = normalizeText(text).replace(/[–—]/g, "-");
   const pizzaStart = input.search(/\bpizza\b/);
-  if (pizzaStart < 0) return null;
+  const standaloneHalf = input.match(
+    /(?:^|\s)(?:de\s+)?meia\s+(.+?)\s+e\s+meia\s+(.+?)(?=\s+com\s+borda\b|\s+para\s+(?:entregar|entrega|retirar|retirada)\b|$)/,
+  );
+  if (pizzaStart < 0 && !standaloneHalf) return null;
 
-  let itemPart = input.slice(pizzaStart + "pizza".length).trim();
+  let itemPart = standaloneHalf
+    ? `${standaloneHalf[1]} e ${standaloneHalf[2]}`
+    : input.slice(pizzaStart + "pizza".length).trim();
   itemPart = itemPart.split(
     /\s+(?=com\s+borda\b|para\s+(?:entregar|entrega|retirar|retirada)\b)/,
     1,
@@ -43,7 +48,7 @@ export function parseNaturalPizzaOrder(
   itemPart = itemPart
     .replace(/^(?:grande|broto)\s+/, "")
     .replace(
-      /^(?:meia[ -]?meia|meio[ -]?a[ -]?meio|meia[ -]?a[ -]?meia)(?:\s+de)?\s+/,
+      /^(?:de\s+)?(?:meia[ -]?meia|meio[ -]?a[ -]?meio|meia[ -]?a[ -]?meia)(?:\s*[,;:]?\s*(?:dois sabores?)?\s*[:,-]?\s*|\s+de\s+)/,
       "",
     );
 
@@ -70,7 +75,7 @@ export function parseNaturalPizzaOrder(
 
   return {
     customer_name: null,
-    category: isBroto ? "broto" : "pizza",
+    category: isBroto ? "broto" : pizzaStart >= 0 ? "pizza" : null,
     flavors,
     size: isBroto ? "Broto" : /\bgrande\b/.test(input) ? "Grande" : null,
     border: border || null,

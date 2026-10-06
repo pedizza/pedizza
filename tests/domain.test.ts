@@ -200,6 +200,28 @@ describe("domain invariants", () => {
         "rua 15 de novembro, 1395, jardim bom recanto, maua, sao paulo",
     });
   });
+  it("extracts half-and-half flavors when speech omits pizza", () => {
+    expect(parseNaturalPizzaOrder("Meia peruana e meia milho.")).toMatchObject({
+      category: null,
+      flavors: ["peruana", "milho"],
+    });
+    expect(
+      parseNaturalPizzaOrder("Quero uma pizza de meia peruana e meia milho."),
+    ).toMatchObject({
+      category: "pizza",
+      flavors: ["peruana", "milho"],
+    });
+  });
+  it("extracts flavors after a two-flavor introduction", () => {
+    expect(
+      parseNaturalPizzaOrder(
+        "Uma pizza meio a meio, dois sabores: portuguesa e calabresa, com borda de catupiry.",
+      ),
+    ).toMatchObject({
+      flavors: ["portuguesa", "calabresa"],
+      border: "catupiry",
+    });
+  });
   it("matches common spelling variants of muçarela", () => {
     expect(normalizeCatalogTerm("Mussarela")).toBe(
       normalizeCatalogTerm("Muçarela"),
