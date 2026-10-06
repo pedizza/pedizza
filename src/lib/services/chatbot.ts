@@ -1219,8 +1219,9 @@ export async function processBotMessage(
       } else if (draft.service === "pickup") {
         await continueAfterAddress(pickupAddressMessage());
       } else {
-        step = "awaiting_service";
-        reply = joinBlocks("Prontinho, já anotei o item! 😋", prompts[step]);
+        const summary = await cartSummary(db, tenant, context.cartId);
+        step = "cart_menu";
+        reply = cartMenuMessage(summary.text, customer?.name);
       }
     }
     if (
