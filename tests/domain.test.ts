@@ -16,6 +16,7 @@ import {
   formatCategoryCatalog,
   WHATSAPP_TEXT_LIMIT,
 } from "@/lib/domain/catalog";
+import { formatAddress } from "@/lib/domain/address";
 describe("domain invariants", () => {
   it("money stays in integer cents", () => {
     expect(splitPrice([5000, 7000], "proportional")).toBe(6000);
@@ -140,5 +141,20 @@ describe("domain invariants", () => {
       "\n\n*2️⃣ Calabresa - R$ 52,00*\nCalabresa e cebola",
     );
     expect(message.length).toBeLessThanOrEqual(WHATSAPP_TEXT_LIMIT);
+  });
+  it("formats delivery addresses in Brazilian reading order", () => {
+    expect(
+      formatAddress({
+        postal_code: "09340450",
+        street: "Rua Quinze de Novembro",
+        number: "1395",
+        complement: "",
+        neighborhood: "Jardim Bom Recanto",
+        city: "Mauá",
+        state: "SP",
+      }),
+    ).toBe(
+      "Rua Quinze de Novembro, nº 1395 - Jardim Bom Recanto - Mauá - SP",
+    );
   });
 });

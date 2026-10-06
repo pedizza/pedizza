@@ -9,6 +9,7 @@ import {
   paymentLabels,
 } from "@/lib/domain/orders";
 import { formatCurrency } from "@/lib/domain/money";
+import { formatAddress } from "@/lib/domain/address";
 import { getStoreOpenStatus, type BusinessHour } from "@/lib/domain/hours";
 import { priceCart } from "./pricing";
 import { enqueue, notify } from "./events";
@@ -64,9 +65,7 @@ export async function orderSummary(db: DB, order: Order) {
     `Entrega: ${formatCurrency(order.delivery_fee_cents)}`,
     `Total: ${formatCurrency(order.total_cents)}`,
     order.service_type === "delivery"
-      ? `Endereço: ${Object.values(order.delivery_address_snapshot || {})
-          .filter(Boolean)
-          .join(", ")}`
+      ? `Endereço: ${formatAddress(order.delivery_address_snapshot)}`
       : "Retirada no local",
     `Pagamento: ${order.payment_method_name_snapshot} · ${paymentLabels[order.payment_status] || order.payment_status}`,
     order.change_for_cents

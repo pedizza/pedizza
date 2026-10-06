@@ -19,6 +19,7 @@ import { finalizeCart } from "./orders";
 import { orderLabels } from "@/lib/domain/orders";
 import type { WhatsAppList } from "@/lib/integrations/evolution";
 import { keycapNumber, mainMenuOption } from "@/lib/domain/whatsapp";
+import { formatAddress } from "@/lib/domain/address";
 import {
   formatCategoryCatalog,
   type CatalogProduct,
@@ -232,6 +233,7 @@ export async function processBotMessage(
       [tenant, conversationId],
     );
     invariant(c, "Conversa indisponível.");
+    const customerId = c.customer_id;
     if (
       await one(
         db,
@@ -417,6 +419,46 @@ export async function processBotMessage(
         (option) => normalizeText(option.name) === normalized,
       );
     };
+    async function requestDeliveryAddress() {
+      const addresses = await rows<{ id: string; name: string }>(
+        db,
+        `select id,
+          'Endereço: ' || street || ', nº ' || number ||
+          case when nullif(complement, '') is not null then ' - ' || complement else '' end ||
+          ' - ' || neighborhood || ' - ' || city || ' - ' || state name
+         from public.customer_addresses
+         where tenant_id=$1 and customer_id=$2 and active and archived_at is null
+         order by is_default desc,created_at desc limit 8`,
+        [tenant, customerId],
+      );
+      context.options = addresses;
+      step = addresses.length ? "awaiting_saved_address" : "awaiting_cep";
+      reply =
+        prompts[step] +
+        (addresses.length
+          ? "\n" +
+            addresses
+              .map((address, index) =>
+                `${keycapNumber(index + 1)} ${address.name}`,
+              )
+              .join("\n")
+          : "");
+    }
+    async function continueAfterAddress() {
+      const cart = await one<{ has_items: boolean }>(
+        db,
+        "select exists(select 1 from public.cart_items where tenant_id=$1 and cart_id=$2) has_items",
+        [tenant, context.cartId],
+      );
+      context.page = 0;
+      if (cart?.has_items) {
+        step = "awaiting_payment";
+        reply = prompts[step] + "\n" + (await options("payment"));
+      } else {
+        step = "awaiting_category";
+        reply = prompts[step] + "\n" + (await options("category"));
+      }
+    }
     if (
       normalized === "atendente" ||
       normalized === "humano" ||
@@ -596,9 +638,8 @@ export async function processBotMessage(
               "pickup",
             );
             context.cartId = cart;
-            step = "awaiting_category";
-            context.page = 0;
-            reply = prompts[step] + "\n" + (await options("category"));
+            context.address = undefined;
+            await continueAfterAddress();
           } else if (isChoice(normalized, "2", "voltar", "voltar ao menu")) {
             step = "main_menu";
             reply = menu.text;
@@ -623,36 +664,17 @@ export async function processBotMessage(
               : store?.pickup_enabled,
             "Esta modalidade está indisponível.",
           );
-          if (deliveryChoice) {
-            const addresses = await rows<{ id: string; name: string }>(
-              db,
-              "select id,label||': '||street||', '||number||' — '||neighborhood name from public.customer_addresses where tenant_id=$1 and customer_id=$2 and active and archived_at is null order by is_default desc,created_at desc limit 8",
-              [tenant, c.customer_id],
-            );
-            context.options = addresses;
-            step = addresses.length ? "awaiting_saved_address" : "awaiting_cep";
-            reply =
-              prompts[step] +
-              (addresses.length
-                ? "\n" +
-                  addresses
-                    .map((a, i) => `${keycapNumber(i + 1)} ${a.name}`)
-                    .join("\n")
-                : "");
-          } else {
-            const cart = await ensureCart(
-              db,
-              tenant,
-              c.id,
-              c.customer_id,
-              "pickup",
-            );
-            context.cartId = cart;
-            context.address = undefined;
-            step = "awaiting_category";
-            context.page = 0;
-            reply = prompts[step] + "\n" + (await options("category"));
-          }
+          context.cartId = await ensureCart(
+            db,
+            tenant,
+            c.id,
+            c.customer_id,
+            deliveryChoice ? "delivery" : "pickup",
+          );
+          context.address = undefined;
+          step = "awaiting_category";
+          context.page = 0;
+          reply = prompts[step] + "\n" + (await options("category"));
           break;
         case "awaiting_saved_address":
           if (
@@ -692,7 +714,7 @@ export async function processBotMessage(
           );
           step = "awaiting_address_confirmation";
           reply =
-            Object.values(savedAddress).filter(Boolean).join(", ") +
+            formatAddress(savedAddress) +
             `\nTaxa: ${formatCurrency(delivery.fee_cents)}\n` +
             prompts[step];
           break;
@@ -714,7 +736,7 @@ export async function processBotMessage(
             : !cep.bairro
               ? "awaiting_neighborhood"
               : "awaiting_number";
-          reply = `${cep.logradouro}, ${cep.bairro} — ${cep.localidade}/${cep.uf}\n${prompts[step]}`;
+          reply = `${[cep.logradouro, cep.bairro, cep.localidade, cep.uf].filter(Boolean).join(" - ")}\n${prompts[step]}`;
           break;
         case "awaiting_street":
           invariant(
@@ -784,9 +806,7 @@ export async function processBotMessage(
           );
           step = "awaiting_address_confirmation";
           reply =
-            Object.values(context.address).filter(Boolean).join(", ") +
-            "\n" +
-            prompts[step];
+            formatAddress(context.address) + "\n" + prompts[step];
           break;
         case "awaiting_address_confirmation":
           if (
@@ -810,7 +830,7 @@ export async function processBotMessage(
             );
             if (!exists)
               await db.query(
-                "insert into public.customer_addresses(tenant_id,customer_id,label,postal_code,street,number,complement,neighborhood,city,state) values($1,$2,'WhatsApp',$3,$4,$5,$6,$7,$8,$9)",
+                "insert into public.customer_addresses(tenant_id,customer_id,label,postal_code,street,number,complement,neighborhood,city,state) values($1,$2,'Endereço',$3,$4,$5,$6,$7,$8,$9)",
                 [
                   tenant,
                   c.customer_id,
@@ -823,9 +843,7 @@ export async function processBotMessage(
                   a.state,
                 ],
               );
-            step = "awaiting_category";
-            context.page = 0;
-            reply = prompts[step] + "\n" + (await options("category"));
+            await continueAfterAddress();
           } else reply = prompts[step];
           break;
         case "awaiting_category":
@@ -1034,9 +1052,19 @@ export async function processBotMessage(
           } else if (
             isChoice(normalized, "2", "finalizar", "finalizar pedido")
           ) {
-            step = "awaiting_payment";
-            context.page = 0;
-            reply = prompts[step] + "\n" + (await options("payment"));
+            const cart = await one<{ service_type: string }>(
+              db,
+              "select service_type from public.carts where tenant_id=$1 and id=$2 and status='active'",
+              [tenant, context.cartId],
+            );
+            invariant(cart, "Carrinho indisponível.");
+            if (cart.service_type === "delivery" && !context.address)
+              await requestDeliveryAddress();
+            else {
+              step = "awaiting_payment";
+              context.page = 0;
+              reply = prompts[step] + "\n" + (await options("payment"));
+            }
           } else if (isChoice(normalized, "3", "aplicar cupom", "cupom")) {
             step = "awaiting_coupon";
             reply = prompts[step];
@@ -1121,7 +1149,7 @@ export async function processBotMessage(
               method.name +
               "\n" +
               (context.address
-                ? Object.values(context.address).join(", ")
+                ? `Endereço: ${formatAddress(context.address)}`
                 : "Retirada no local") +
               "\n\n" +
               prompts[step];
@@ -1143,7 +1171,7 @@ export async function processBotMessage(
             emailQuote.text +
             "\nPagamento: PIX Mercado Pago\n" +
             (context.address
-              ? Object.values(context.address).join(", ")
+              ? `Endereço: ${formatAddress(context.address)}`
               : "Retirada no local") +
             "\n" +
             prompts[step];
@@ -1177,7 +1205,7 @@ export async function processBotMessage(
               : " · Sem troco") +
             "\n" +
             (context.address
-              ? Object.values(context.address).join(", ")
+              ? `Endereço: ${formatAddress(context.address)}`
               : "Retirada no local") +
             "\n\n" +
             prompts[step];
