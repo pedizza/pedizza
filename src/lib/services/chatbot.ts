@@ -84,7 +84,12 @@ function namedMessage(name: string | undefined, message: string) {
 
 function shouldInterpretMessage(step: string, text: string) {
   if (!text.trim() || /^\d+$/.test(normalizeText(text))) return false;
+  const naturalLanguageIntent =
+    /\b(quero|pedido|pedir|pizza|meia|meio|sabor|borda|entrega|retirada|status|tempo|demora|pronto|endere[cç]o|hor[aá]rio|pagamento|pagar|rob[oô]|intelig[eê]ncia|ia|atendente|humano|obrigad[oa]|oi|ol[aá])\b/i.test(
+      text,
+    );
   if (text.includes("?")) return true;
+  if (naturalLanguageIntent) return true;
   if (
     [
       "awaiting_name",
@@ -102,9 +107,7 @@ function shouldInterpretMessage(step: string, text: string) {
     ].includes(step)
   )
     return false;
-  return /\b(quero|pedido|pedir|pizza|meia|meio|sabor|borda|entrega|retirada|status|tempo|demora|pronto|endere[cç]o|rob[oô]|intelig[eê]ncia|ia|atendente|humano|obrigad[oa]|oi|ol[aá])\b/i.test(
-    text,
-  );
+  return false;
 }
 
 const prompts: Record<string, string> = {
