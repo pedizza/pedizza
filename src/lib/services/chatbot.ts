@@ -35,7 +35,6 @@ type BotContext = {
   productIds?: string[];
   sizeId?: string | null;
   borderId?: string | null;
-  quantity?: number;
   quoteHash?: string;
   page?: number;
   previousStep?: string;
@@ -81,7 +80,6 @@ const prompts: Record<string, string> = {
   awaiting_second_flavor: "Escolha o segundo sabor para o mesmo tamanho:",
   awaiting_border:
     "Escolha uma borda ou digite 0️⃣ para continuar sem borda:",
-  awaiting_quantity: "Qual a quantidade? (1 a 99)",
   awaiting_observation:
     "Alguma observação? Digite 0️⃣ para continuar sem observação.",
   cart_menu:
@@ -1024,15 +1022,6 @@ export async function processBotMessage(
             break;
           }
           context.borderId = withoutBorder ? null : selected()!.id;
-          step = "awaiting_quantity";
-          reply = prompts[step];
-          break;
-        case "awaiting_quantity":
-          invariant(
-            /^\d{1,2}$/.test(normalized) && Number(normalized) > 0,
-            "Informe uma quantidade entre 1 e 99.",
-          );
-          context.quantity = Number(normalized);
           step = "awaiting_observation";
           reply = prompts[step];
           break;
@@ -1050,7 +1039,7 @@ export async function processBotMessage(
               context.productIds,
               context.sizeId,
               context.borderId,
-              context.quantity,
+              1,
               isChoice(
                 normalized,
                 "0",
