@@ -1,7 +1,17 @@
 "use client";
 import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
-import { Printer, MessageCircle, ArrowRight, Search } from "lucide-react";
+import {
+  Printer,
+  MessageCircle,
+  ArrowRight,
+  Search,
+  Inbox,
+  ChefHat,
+  CircleCheck,
+  Bike,
+  Store,
+} from "lucide-react";
 import type { Order } from "@/lib/services/orders";
 import type { Permission } from "@/lib/permissions";
 import {
@@ -193,11 +203,16 @@ export function OrdersBoard({
     }
   }
   const groups = [
-    { label: "Novos", statuses: ["new"] },
-    { label: "Em preparo", statuses: ["accepted", "preparing"] },
-    { label: "Prontos", statuses: ["ready", "ready_for_pickup"] },
+    { label: "Novos", Icon: Inbox, statuses: ["new"] },
+    { label: "Em preparo", Icon: ChefHat, statuses: ["accepted", "preparing"] },
     {
-      label: "Em entrega / finalizados",
+      label: "Prontos",
+      Icon: CircleCheck,
+      statuses: ["ready", "ready_for_pickup"],
+    },
+    {
+      label: "Entregas e finalizados",
+      Icon: Bike,
       statuses: [
         "out_for_delivery",
         "delivered",
@@ -262,6 +277,7 @@ export function OrdersBoard({
               key={g.label}
             >
               <h2>
+                <g.Icon size={17} aria-hidden="true" />
                 {g.label}
                 <span className="badge">
                   {
@@ -270,12 +286,22 @@ export function OrdersBoard({
                   }
                 </span>
               </h2>
+              {!orders.some((order) =>
+                g.statuses.includes(order.order_status),
+              ) && (
+                <div className="kanban-empty">
+                  <g.Icon size={25} />
+                  <span>Nenhum pedido nesta etapa</span>
+                </div>
+              )}
               {orders
                 .filter((o) => g.statuses.includes(o.order_status))
                 .map((o) => (
                   <article className="order-card" key={o.id}>
                     <div className="row between">
-                      <strong>#{o.order_number}</strong>
+                      <strong className="order-number">
+                        #{o.order_number}
+                      </strong>
                       <small>
                         {new Date(o.created_at).toLocaleTimeString("pt-BR", {
                           hour: "2-digit",
@@ -286,11 +312,18 @@ export function OrdersBoard({
                     <h3 style={{ margin: "16px 0 5px" }}>
                       {o.customer_name_snapshot}
                     </h3>
-                    <small>
-                      {o.service_type === "delivery" ? "Entrega" : "Retirada"} ·{" "}
-                      {orderLabels[o.order_status]}
-                    </small>
-                    <div className="row between" style={{ margin: "18px 0" }}>
+                    <div className="order-service">
+                      <span>
+                        {o.service_type === "delivery" ? (
+                          <Bike size={14} />
+                        ) : (
+                          <Store size={14} />
+                        )}
+                        {o.service_type === "delivery" ? "Entrega" : "Retirada"}
+                      </span>
+                      <small>{orderLabels[o.order_status]}</small>
+                    </div>
+                    <div className="row between order-payment">
                       <strong>{formatCurrency(o.total_cents)}</strong>
                       <span
                         className={`badge ${o.payment_status === "paid" ? "green" : "amber"}`}
@@ -313,7 +346,10 @@ export function OrdersBoard({
                       style={{ width: "100%" }}
                       onClick={() => inspect(o.id)}
                     >
-                      Ver pedido <ArrowRight size={14} />
+                      {o.order_status === "new"
+                        ? "Conferir pedido"
+                        : "Ver detalhes"}{" "}
+                      <ArrowRight size={14} />
                     </button>
                   </article>
                 ))}

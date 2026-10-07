@@ -1,5 +1,12 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import "./workspace.css";
+import localFont from "next/font/local";
+const manrope = localFont({
+  src: "./fonts/Manrope.ttf",
+  variable: "--font-manrope",
+  display: "swap",
+});
 import { headers } from "next/headers";
 export const metadata: Metadata = {
   metadataBase: new URL("https://www.pedizza.com.br"),
@@ -26,7 +33,7 @@ export default async function RootLayout({
   await headers();
   return (
     <html lang="pt-BR">
-      <body>{children}</body>
+      <body className={manrope.variable}>{children}</body>
     </html>
   );
 }

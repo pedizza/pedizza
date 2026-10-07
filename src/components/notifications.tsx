@@ -153,7 +153,7 @@ export function Notifications({ tenantId }: { tenantId: string }) {
           {error}
         </p>
       )}
-      <div className="card">
+      <div className="card notification-feed">
         {items.length === 0 ? (
           <EmptyState
             title="Tudo em dia"

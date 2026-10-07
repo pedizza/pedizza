@@ -67,10 +67,10 @@ export function AppShell({
     };
   }, [open]);
   const priority = [
+    "/app/visao-geral",
     "/app/pedidos",
     "/app/conversas",
     "/app/cardapio",
-    "/app/visao-geral",
   ];
   const links = navigation
     .filter((n) => ctx.permissions.includes(n.permission))
@@ -79,6 +79,20 @@ export function AppShell({
         priority.includes(href) ? priority.indexOf(href) : priority.length;
       return rank(a.href) - rank(b.href);
     });
+  const navigationGroups = [
+    {
+      label: "DIA A DIA",
+      hrefs: ["/app/visao-geral", "/app/pedidos", "/app/conversas"],
+    },
+    {
+      label: "CATÁLOGO E VENDAS",
+      hrefs: ["/app/cardapio", "/app/clientes", "/app/campanhas"],
+    },
+    {
+      label: "SUA LOJA",
+      hrefs: ["/app/entrega", "/app/equipe", "/app/configuracoes"],
+    },
+  ];
   const current = links.find((n) => path.startsWith(n.href));
   async function switchTenant(id: string) {
     const r = await fetch("/api/tenant", {
@@ -108,7 +122,7 @@ export function AppShell({
             width={110}
             height={100}
             alt="Pedizza"
-            priority
+            preload
           />
         </Link>
         <div className="workspace-card">
@@ -120,25 +134,36 @@ export function AppShell({
             <strong>{ctx.tenantName}</strong>
           </div>
         </div>
-        <div className="nav-section-label">OPERAÇÃO</div>
         <nav className="nav-list" aria-label="Navegação principal">
-          {links.map((n) => {
-            const Icon = icons[n.icon as keyof typeof icons];
+          {navigationGroups.map((group) => {
+            const groupLinks = links.filter((link) =>
+              group.hrefs.includes(link.href),
+            );
+            if (!groupLinks.length) return null;
             return (
-              <Link
-                key={n.href}
-                href={n.href}
-                prefetch={false}
-                onClick={() => setOpen(false)}
-                aria-current={path.startsWith(n.href) ? "page" : undefined}
-                className={`nav-link ${path.startsWith(n.href) ? "active" : ""}`}
-              >
-                <Icon size={18} />
-                <span>{n.label}</span>
-                {path.startsWith(n.href) && (
-                  <ChevronRight size={14} className="nav-current-arrow" />
-                )}
-              </Link>
+              <div className="navigation-group" key={group.label}>
+                <div className="nav-section-label">{group.label}</div>
+                {groupLinks.map((n) => {
+                  const Icon = icons[n.icon as keyof typeof icons];
+                  const active = path.startsWith(n.href);
+                  return (
+                    <Link
+                      key={n.href}
+                      href={n.href}
+                      prefetch={false}
+                      onClick={() => setOpen(false)}
+                      aria-current={active ? "page" : undefined}
+                      className={`nav-link ${active ? "active" : ""}`}
+                    >
+                      <Icon size={19} />
+                      <span>{n.label}</span>
+                      {active && (
+                        <ChevronRight size={14} className="nav-current-arrow" />
+                      )}
+                    </Link>
+                  );
+                })}
+              </div>
             );
           })}
         </nav>
@@ -193,16 +218,13 @@ export function AppShell({
             >
               <Menu size={19} />
             </button>
-            <span className="topbar-title desktop-only">
+            <span className="topbar-title">
               {current?.label ||
                 (path === "/app/notificacoes"
                   ? "Notificações"
                   : path === "/app/assinatura"
                     ? "Minha assinatura"
                     : "Minha loja")}
-            </span>
-            <span className="topbar-context desktop-only">
-              Espaço de trabalho
             </span>
           </div>
           <div className="row">

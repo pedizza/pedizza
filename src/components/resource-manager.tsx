@@ -418,27 +418,28 @@ export function ResourceManager({
           </small>
         </div>
       )}
+      {resourceKey === "produtos" && (
+        <nav className="catalog-categories" aria-label="Categorias de produtos">
+          {[{ id: "", name: "Todos os produtos" }, ...categories].map(
+            (item) => (
+              <button
+                key={item.id}
+                type="button"
+                className={`category-chip ${category === item.id ? "selected" : ""}`}
+                aria-pressed={category === item.id}
+                onClick={() => {
+                  setCategory(item.id);
+                  setPage(1);
+                  setLoading(true);
+                }}
+              >
+                {item.name}
+              </button>
+            ),
+          )}
+        </nav>
+      )}
       <div className="resource-filterbar">
-        {resourceKey === "produtos" && (
-          <label className="product-category-filter">
-            Categoria
-            <select
-              value={category}
-              onChange={(e) => {
-                setCategory(e.target.value);
-                setPage(1);
-                setLoading(true);
-              }}
-            >
-              <option value="">Todas as categorias</option>
-              {categories.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
         {resource.search && (
           <form
             className="search"

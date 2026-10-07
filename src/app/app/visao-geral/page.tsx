@@ -118,7 +118,7 @@ export default async function Page({
         title={`Olá, ${ctx.name.split(" ")[0]}.`}
         description="Vamos acompanhar o movimento da sua pizzaria?"
         action={
-          <div className="row">
+          <div className="period-switch">
             {[1, 7, 30].map((n) => (
               <Link
                 key={n}
@@ -133,7 +133,10 @@ export default async function Page({
       />
       <div className="stats">
         {cards.map((c) => (
-          <article className="stat-card" key={c.label}>
+          <article
+            className={`stat-card ${c.Icon === Banknote ? "stat-sales" : ""}`}
+            key={c.label}
+          >
             <div className="stat-label">
               {c.label}
               <c.Icon size={18} />
@@ -158,14 +161,18 @@ export default async function Page({
                   aria-label="Vendas por dia"
                 >
                   {result.chart.map((v) => (
-                    <div
-                      className="chart-bar"
-                      key={v.day}
-                      style={{
-                        height: Math.max(4, (Number(v.total) / max) * 175),
-                      }}
-                      title={`${v.day}: ${formatCurrency(Number(v.total))}`}
-                    />
+                    <div className="revenue-day" key={v.day}>
+                      <span className="revenue-value">
+                        {formatCurrency(Number(v.total))}
+                      </span>
+                      <div
+                        className="chart-bar"
+                        style={{
+                          height: Math.max(4, (Number(v.total) / max) * 175),
+                        }}
+                      />
+                      <span className="revenue-date">{v.day}</span>
+                    </div>
                   ))}
                 </div>
               ) : (
@@ -211,7 +218,7 @@ export default async function Page({
           </section>
         </div>
         <div className="stack">
-          <section className="card">
+          <section className="card operation-panel">
             <div className="card-heading">
               <h2>Agora na operação</h2>
               <Clock size={17} className="muted" />

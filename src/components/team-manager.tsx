@@ -103,7 +103,7 @@ export function TeamManager({ permissions }: { permissions: Permission[] }) {
       )}
       <div className="team-grid">
         {data?.members.map((m) => (
-          <article className="data-row" key={m.id}>
+          <article className="data-row team-member" key={m.id}>
             <span className="avatar">{m.name.slice(0, 2).toUpperCase()}</span>
             <div className="detail">
               <h3>{m.name}</h3>

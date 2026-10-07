@@ -106,7 +106,7 @@ export function Billing({
           </p>
         )}
       </section>
-      <section className="card">
+      <section className="card billing-payment">
         <span className="icon-box">
           <ShieldCheck size={24} />
         </span>
