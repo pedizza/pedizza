@@ -186,7 +186,8 @@ const prompts: Record<string, string> = {
     "Perfeito, vamos começar a anotar seu pedido! 🍕\n\nQual seu nome, por gentileza? 😊",
   awaiting_service:
     "Como você prefere receber seu pedido? 🍕\n\n1️⃣ Entrega 🛵\n2️⃣ Retirada 🏪",
-  awaiting_cep: "Informe seu CEP (8 números).",
+  awaiting_cep:
+    "Qual é o CEP para entrega? 📍\n\nDigite os 8 números, por favor.",
   awaiting_number: "Qual é o número do endereço?",
   awaiting_street: "Qual é o nome da rua?",
   awaiting_neighborhood: "Qual é o bairro?",
@@ -665,6 +666,19 @@ export async function processBotMessage(
         namedMessage(customer?.name, "Anotei o seu pedido! 📝"),
         prompts[step],
       );
+    }
+    async function beginAddingMoreItems() {
+      context.categoryId = undefined;
+      context.categoryName = undefined;
+      context.secondCategoryId = undefined;
+      context.secondCategoryName = undefined;
+      context.productIds = undefined;
+      context.sizeId = undefined;
+      context.borderId = undefined;
+      context.options = undefined;
+      context.page = 0;
+      step = "awaiting_category";
+      reply = joinBlocks(prompts[step], await options("category"));
     }
     async function productSelectionCatalog(footer = "") {
       const itemNoun = isBeverageCategory() ? "bebida" : "sabor";
@@ -1783,7 +1797,8 @@ export async function processBotMessage(
           break;
         case "awaiting_cep":
           if (!cep) {
-            reply = "Confira seu CEP e envie os 8 números.";
+            reply =
+              "Não consegui localizar esse CEP 😅\n\nConfira os 8 números e envie novamente, por favor.";
             break;
           }
           context.address = {
@@ -2044,6 +2059,17 @@ export async function processBotMessage(
           );
           break;
         case "awaiting_second_flavor":
+          if (
+            isChoice(
+              normalized,
+              "adicionar mais itens",
+              "adicionar mais item",
+              "mais itens",
+            )
+          ) {
+            await beginAddingMoreItems();
+            break;
+          }
           if (!selected()) {
             reply = await secondFlavorCatalog(
               "Responda com o número ou o nome do segundo sabor.",
@@ -2120,9 +2146,7 @@ export async function processBotMessage(
           if (
             isChoice(normalized, "1", "adicionar mais itens", "adicionar item")
           ) {
-            step = "awaiting_category";
-            context.page = 0;
-            reply = joinBlocks(prompts[step], await options("category"));
+            await beginAddingMoreItems();
           } else if (
             isChoice(normalized, "2", "finalizar", "finalizar pedido")
           ) {
@@ -2271,12 +2295,10 @@ export async function processBotMessage(
               "adicionar mais itens",
               "adicionar item",
               "mais itens",
-            )
+          )
           ) {
             context.quoteHash = undefined;
-            context.page = 0;
-            step = "awaiting_category";
-            reply = joinBlocks(prompts[step], await options("category"));
+            await beginAddingMoreItems();
           } else if (
             isChoice(
               normalized,
