@@ -13,6 +13,11 @@ export default async function Page({
         { key: "loja", label: "Minha loja" },
         { key: "horarios", label: "Horários" },
         {
+          key: "cardapio-publico",
+          label: "Cardápio público",
+          href: "/app/configuracoes/cardapio-publico",
+        },
+        {
           key: "whatsapp",
           label: "WhatsApp",
           href: "/app/configuracoes/whatsapp",

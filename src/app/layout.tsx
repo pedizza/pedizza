@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import "./workspace.css";
+import "./public-menu.css";
 import localFont from "next/font/local";
 const manrope = localFont({
   src: "./fonts/Manrope.ttf",
