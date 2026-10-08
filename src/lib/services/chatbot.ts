@@ -279,22 +279,29 @@ function mainMenu(
 }
 async function cartSummary(db: DB, tenant: string, cart: string) {
   const q = await priceCart(db, tenant, cart);
+  const delivery = await one<{ has_delivery_address: boolean }>(
+    db,
+    "select address_snapshot is not null has_delivery_address from public.carts where tenant_id=$1 and id=$2",
+    [tenant, cart],
+  );
   const items = q.items.map(
     (item, index) =>
       `${keycapNumber(index + 1)} ${item.quantity}x ${item.size_name_snapshot || ""} ${item.name_snapshot}${item.border_name_snapshot ? " · " + item.border_name_snapshot : ""} — ${formatChatCurrency(item.unit_price_cents * item.quantity)}${item.observation ? "\nObservação do Pedido: " + item.observation : ""}`,
   );
+  const totals = [
+    `Subtotal: ${formatChatCurrency(q.subtotal_cents)}`,
+    q.discount_cents > 0
+      ? `Desconto: ${formatChatCurrency(q.discount_cents)}`
+      : "Desconto: Sem desconto aplicado",
+  ];
+  if (delivery?.has_delivery_address)
+    totals.push(`Entrega: ${formatChatCurrency(q.delivery_fee_cents)}`);
+  totals.push(`Total: ${formatChatCurrency(q.total_cents)}`);
   return {
     quote: q,
     text: joinBlocks(
       items.join("\n\n"),
-      [
-        `Subtotal: ${formatChatCurrency(q.subtotal_cents)}`,
-        q.discount_cents > 0
-          ? `Desconto: ${formatChatCurrency(q.discount_cents)}`
-          : "Desconto: Sem desconto aplicado",
-        `Entrega: ${formatChatCurrency(q.delivery_fee_cents)}`,
-        `Total: ${formatChatCurrency(q.total_cents)}`,
-      ].join("\n"),
+      totals.join("\n"),
     ),
   };
 }
