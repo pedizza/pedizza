@@ -119,21 +119,12 @@ export function AppShell({
         <Link className="brand" href="/app">
           <Image
             src="/logo.png"
-            width={110}
-            height={100}
+            width={150}
+            height={137}
             alt="Pedizza"
             preload
           />
         </Link>
-        <div className="workspace-card">
-          <span className="workspace-icon">
-            <Store size={18} />
-          </span>
-          <div>
-            <small>SUA PIZZARIA</small>
-            <strong>{ctx.tenantName}</strong>
-          </div>
-        </div>
         <nav className="nav-list" aria-label="Navegação principal">
           {navigationGroups.map((group) => {
             const groupLinks = links.filter((link) =>
@@ -190,7 +181,20 @@ export function AppShell({
         </nav>
         <div className="sidebar-user">
           <div className="row">
-            <span className="avatar">{ctx.name.slice(0, 2).toUpperCase()}</span>
+            {ctx.hasStoreLogo && ctx.storeSettingsId ? (
+              <Image
+                className="tenant-logo-avatar"
+                src={`/api/images?resource=loja&id=${ctx.storeSettingsId}`}
+                width={48}
+                height={48}
+                alt={`Logo da ${ctx.tenantName}`}
+                unoptimized
+              />
+            ) : (
+              <span className="avatar">
+                {ctx.name.slice(0, 2).toUpperCase()}
+              </span>
+            )}
             <div>
               <strong>{ctx.name}</strong>
               <small>{ctx.tenantName}</small>

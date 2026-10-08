@@ -52,7 +52,9 @@ function input(request: Request) {
 export async function GET(request: Request) {
   try {
     const { r, id } = input(request),
-      ctx = await requireTenant(r.read);
+      // Every store member needs the tenant logo in the sidebar, even when
+      // their role cannot edit or view store settings.
+      ctx = await requireTenant(r === config.loja ? undefined : r.read);
     const record = await transaction(
       (db) =>
         one<{ path: string }>(

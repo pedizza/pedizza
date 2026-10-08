@@ -12,6 +12,8 @@ export type TenantContext = {
   name: string;
   tenantId: string;
   tenantName: string;
+  storeSettingsId: string | null;
+  hasStoreLogo: boolean;
   memberId: string;
   role: string;
   permissions: Permission[];
@@ -43,12 +45,19 @@ export const getCurrentTenant = cache(
         `select array(select code from public.permissions where public.has_permission($1,code)) permissions, private.subscription_active($1) allowed`,
         [m.id],
       );
+      const store = await one<{ id: string; has_logo: boolean }>(
+        db,
+        "select id,logo_path is not null has_logo from public.store_settings where tenant_id=$1",
+        [m.id],
+      );
       return {
         userId: user.id,
         email: user.email || "",
         name: m.profile_name,
         tenantId: m.id,
         tenantName: m.name,
+        storeSettingsId: store?.id || null,
+        hasStoreLogo: !!store?.has_logo,
         memberId: m.member_id,
         role: m.role,
         permissions: access?.permissions || [],

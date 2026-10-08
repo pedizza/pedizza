@@ -98,13 +98,26 @@ textarea:focus {
   margin-left: 246px;
 }
 .shell .sidebar .brand {
-  margin: 0 0 15px;
-  padding: 0 12px;
+  justify-content: center;
+  height: 126px;
+  min-height: 126px;
+  margin: 0 0 8px;
+  padding: 0;
 }
 .shell .sidebar .brand img {
-  width: 92px;
-  height: 84px;
+  width: 138px;
+  height: 126px;
   object-fit: contain;
+}
+.shell .tenant-logo-avatar {
+  width: 46px;
+  height: 46px;
+  flex: 0 0 46px;
+  object-fit: contain;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
 }
 .shell .workspace-card {
   padding: 13px 12px;
@@ -869,6 +882,14 @@ textarea:focus {
   .shell .sidebar {
     width: min(290px, 86vw);
     padding: 20px 16px;
+  }
+  .shell .sidebar .brand {
+    height: 126px;
+    min-height: 126px;
+  }
+  .shell .sidebar .brand img {
+    width: 138px;
+    height: 126px;
   }
   .shell .shell-main {
     margin-left: 0;
