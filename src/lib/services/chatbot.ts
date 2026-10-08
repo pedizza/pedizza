@@ -55,6 +55,7 @@ type BotContext = {
   quoteHash?: string;
   page?: number;
   previousStep?: string;
+  resumeStep?: string;
   pendingOrder?: NaturalOrder;
   continueSelectedCategory?: boolean;
 };
@@ -67,6 +68,7 @@ type Conversation = {
   context: BotContext;
   version: number;
   bot_epoch: number;
+  previous_inbound_at?: Date | null;
 };
 
 function isChoice(input: string, ...choices: string[]) {
@@ -314,8 +316,12 @@ export async function processBotMessage(
   const initial = await transaction((db) =>
     one<Conversation>(
       db,
-      "select id,tenant_id,customer_id,bot_paused,current_step,context,version,bot_epoch from public.conversations where tenant_id=$1 and id=$2",
-      [tenant, conversationId],
+      `select c.id,c.tenant_id,c.customer_id,c.bot_paused,c.current_step,c.context,c.version,c.bot_epoch,
+        (select max(m.created_at) from public.conversation_messages m
+         where m.tenant_id=c.tenant_id and m.conversation_id=c.id
+           and m.direction='inbound' and m.id<>$3) previous_inbound_at
+       from public.conversations c where c.tenant_id=$1 and c.id=$2`,
+      [tenant, conversationId, messageId],
     ),
   );
   if (!initial) return;
@@ -840,6 +846,17 @@ export async function processBotMessage(
       );
     }
 
+    async function resumeCartMessage() {
+      invariant(context.cartId, "Carrinho indisponível.");
+      const summary = await cartSummary(db, tenant, context.cartId);
+      return joinBlocks(
+        "Vi que seu pedido ficou em aberto 😊",
+        summary.text,
+        "Você prefere continuar de onde parou ou começar um novo pedido?",
+        "1️⃣ Continuar pedido\n2️⃣ Fazer novo pedido",
+      );
+    }
+
     async function currentStepMessage() {
       if (step === "main_menu")
         return joinBlocks("Como podemos ajudar?", prompts.main_menu);
@@ -863,6 +880,8 @@ export async function processBotMessage(
         const summary = await cartSummary(db, tenant, context.cartId);
         return cartMenuMessage(summary.text, customer?.name);
       }
+      if (step === "resume_cart" && context.cartId)
+        return resumeCartMessage();
       if (step === "awaiting_final_confirmation" && context.cartId) {
         const summary = await cartSummary(db, tenant, context.cartId);
         return buildFinalConfirmation(summary.text, summary.quote.total_cents);
@@ -901,6 +920,22 @@ export async function processBotMessage(
         kind ? await options(kind) : undefined,
       );
     }
+
+    const idleSincePreviousInbound = initial.previous_inbound_at
+      ? Date.now() - new Date(initial.previous_inbound_at).getTime()
+      : 0;
+    const resumableCart =
+      idleSincePreviousInbound >= 30 * 60 * 1000
+        ? await one<{ id: string }>(
+            db,
+            `select c.id from public.carts c
+             where c.tenant_id=$1 and c.conversation_id=$2 and c.customer_id=$3
+               and c.status='active'
+               and exists(select 1 from public.cart_items ci where ci.tenant_id=c.tenant_id and ci.cart_id=c.id)
+             order by c.updated_at desc,c.created_at desc limit 1`,
+            [tenant, c.id, c.customer_id],
+          )
+        : null;
 
     async function startOrderFromSelectedCategory() {
       if (!isOpen) {
@@ -1401,6 +1436,12 @@ export async function processBotMessage(
       c.context = {};
       step = "main_menu";
       reply = joinBlocks("Rascunho cancelado.", prompts.main_menu);
+    } else if (resumableCart) {
+      context.cartId = resumableCart.id;
+      context.resumeStep =
+        step === "main_menu" || step === "resume_cart" ? "cart_menu" : step;
+      step = "resume_cart";
+      reply = await resumeCartMessage();
     } else if (normalized === "menu") {
       if (["browsing_products", "awaiting_product"].includes(step)) {
         context.categoryId = undefined;
@@ -2148,6 +2189,64 @@ export async function processBotMessage(
           const summary = await cartSummary(db, tenant, context.cartId);
           step = "cart_menu";
           reply = cartMenuMessage(summary.text, customer?.name);
+          break;
+        case "resume_cart":
+          if (
+            isChoice(
+              normalized,
+              "1",
+              "continuar",
+              "continuar pedido",
+              "retomar",
+              "retomar pedido",
+              "seguir",
+            )
+          ) {
+            invariant(context.cartId, "Carrinho indisponível.");
+            await db.query(
+              "update public.carts set expires_at=now()+interval '2 hours' where tenant_id=$1 and id=$2 and status='active'",
+              [tenant, context.cartId],
+            );
+            step = context.resumeStep || "cart_menu";
+            context.resumeStep = undefined;
+            reply = await currentStepMessage();
+          } else if (
+            isChoice(
+              normalized,
+              "2",
+              "novo pedido",
+              "fazer novo pedido",
+              "começar novo pedido",
+            )
+          ) {
+            invariant(context.cartId, "Carrinho indisponível.");
+            await db.query(
+              "delete from public.cart_items where tenant_id=$1 and cart_id=$2",
+              [tenant, context.cartId],
+            );
+            await db.query(
+              "update public.carts set service_type='pickup',address_snapshot=null,distance_meters=null,delivery_fee_cents=0,payment_method_id=null,change_for_cents=null,coupon_code=null,quote_hash=null,expires_at=now()+interval '2 hours' where tenant_id=$1 and id=$2 and status='active'",
+              [tenant, context.cartId],
+            );
+            context.address = undefined;
+            context.resumeStep = undefined;
+            context.pendingOrder = undefined;
+            context.categoryId = undefined;
+            context.categoryName = undefined;
+            context.secondCategoryId = undefined;
+            context.secondCategoryName = undefined;
+            context.productIds = undefined;
+            context.sizeId = undefined;
+            context.borderId = undefined;
+            context.quoteHash = undefined;
+            context.page = 0;
+            step = "awaiting_category";
+            reply = joinBlocks(
+              "Tudo bem! Vamos começar um novo pedido 😊",
+              prompts[step],
+              await options("category"),
+            );
+          } else reply = await resumeCartMessage();
           break;
         case "cart_menu":
           if (
