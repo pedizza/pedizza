@@ -3,7 +3,7 @@ import { z } from "zod";
 import webpush from "web-push";
 import { transaction, one, rows } from "@/lib/db";
 import { privateFiles } from "@/lib/services/files";
-import { storeMedia } from "./media";
+import { detectMedia, storeMedia } from "./media";
 import {
   sendText,
   sendPresence,
@@ -501,7 +501,7 @@ async function processEvolution(job: Job) {
     };
   });
   if (!record.processed && !data.key.fromMe)
-    await sendPresence(instance.instance_name, phone).catch(() => {});
+    void sendPresence(instance.instance_name, phone).catch(() => {});
   if (
     !body &&
     !record.processed &&
@@ -515,17 +515,25 @@ async function processEvolution(job: Job) {
         remote.base64.replace(/^data:[^;]+;base64,/, ""),
         "base64",
       );
-      const saved = await storeMedia(
-        tenant,
-        record.conversationId,
-        mediaData,
-        remote.fileName || "Anexo",
-        false,
-        remote.mimetype,
-      );
-      const transcription = saved.mime.startsWith("audio/")
-        ? await transcribeAudio(mediaData, saved.mime, saved.name)
-        : null;
+      const detectedMime = detectMedia(mediaData);
+      const audioMime =
+        detectedMime === "video/mp4" &&
+        remote.mimetype.split(";")[0] === "audio/mp4"
+          ? "audio/mp4"
+          : detectedMime;
+      const [saved, transcription] = await Promise.all([
+        storeMedia(
+          tenant,
+          record.conversationId,
+          mediaData,
+          remote.fileName || "Anexo",
+          false,
+          remote.mimetype,
+        ),
+        audioMime?.startsWith("audio/")
+          ? transcribeAudio(mediaData, audioMime, remote.fileName || "Audio")
+          : Promise.resolve(null),
+      ]);
       if (transcription) body = transcription;
       await transaction((db) =>
         db.query(

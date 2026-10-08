@@ -96,6 +96,8 @@ function namedMessage(name: string | undefined, message: string) {
 function shouldInterpretMessage(step: string, text: string) {
   if (!text.trim() || /^\d+$/.test(normalizeText(text))) return false;
   const normalized = normalizeText(text);
+  // Menu commands are deterministic; avoid an LLM round trip before advancing.
+  if (step === "main_menu" && mainMenuOption(normalized)) return false;
   if (
     [
       "awaiting_category",

@@ -45,6 +45,13 @@ const nullableString = { type: ["string", "null"] } as const;
 
 export async function interpretMessage(text: string, currentStep: string) {
   if (!process.env.OPENAI_API_KEY) return null;
+  const containsOrderDetails =
+    /\b(pizza|sabor|meia|meio|broto|grande|borda|entrega|retirada|cep|rua)\b/i.test(
+      text,
+    );
+  const model = containsOrderDetails
+    ? process.env.OPENAI_MODEL || "gpt-4.1-mini"
+    : process.env.OPENAI_FAST_MODEL || "gpt-4.1-nano";
   try {
     const response = z
       .object({
@@ -68,7 +75,7 @@ export async function interpretMessage(text: string, currentStep: string) {
               "Content-Type": "application/json",
             },
             body: JSON.stringify({
-              model: process.env.OPENAI_MODEL || "gpt-4.1-mini",
+              model,
               store: false,
               max_output_tokens: 500,
               instructions:
