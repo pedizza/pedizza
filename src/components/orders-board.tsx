@@ -170,7 +170,11 @@ export function OrdersBoard({
     setBusy(true);
     const printWindow =
       autoPrint && action.status === "accepted"
-        ? window.open("about:blank", "_blank")
+        ? window.open(
+            "about:blank",
+            "pedizza-print-popup",
+            "popup=yes,width=480,height=720,resizable=yes,scrollbars=yes",
+          )
         : null;
     const f = new FormData(e.currentTarget);
     try {
