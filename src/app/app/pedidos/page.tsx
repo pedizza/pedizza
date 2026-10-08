@@ -4,8 +4,13 @@ import { OrdersBoard } from "@/components/orders-board";
 import { PageHeader } from "@/components/ui/states";
 import { StoreStatusControl } from "@/components/store-status-control";
 import { listOrders } from "@/lib/services/orders";
-export default async function Page() {
+export default async function Page({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string }>;
+}) {
   const ctx = await requirePage("orders.view");
+  const initialQuery = (await searchParams).q?.slice(0, 100) || "";
   const initial = await transaction(async (db) => {
     const observed = await one<{
       observed_at: string;
@@ -18,7 +23,7 @@ export default async function Page() {
       [ctx.tenantId],
     );
     return {
-      ...(await listOrders(db, ctx.tenantId)),
+      ...(await listOrders(db, ctx.tenantId, { search: initialQuery })),
       observed,
     };
   }, ctx.userId);
@@ -41,6 +46,7 @@ export default async function Page() {
         initialOrders={initial.data}
         initialTotal={initial.total}
         initialObservedAt={initial.observed?.observed_at}
+        initialQuery={initialQuery}
       />
     </>
   );

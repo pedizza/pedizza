@@ -49,6 +49,7 @@ export function OrdersBoard({
   initialOrders = [],
   initialTotal = 0,
   initialObservedAt,
+  initialQuery = "",
 }: {
   tenantId: string;
   permissions: Permission[];
@@ -57,13 +58,14 @@ export function OrdersBoard({
   initialOrders?: Order[];
   initialTotal?: number;
   initialObservedAt?: string;
+  initialQuery?: string;
 }) {
   const [orders, setOrders] = useState<Order[]>(initialOrders),
     [filter, setFilter] = useState(""),
     [page, setPage] = useState(1),
     [total, setTotal] = useState(initialTotal),
-    [search, setSearch] = useState(""),
-    [query, setQuery] = useState(""),
+    [search, setSearch] = useState(initialQuery),
+    [query, setQuery] = useState(initialQuery),
     [realtimeConnected, setRealtimeConnected] = useState(false),
     [error, setError] = useState(""),
     [detail, setDetail] = useState<Detail | null>(null),
@@ -72,7 +74,7 @@ export function OrdersBoard({
     ),
     [busy, setBusy] = useState(false);
   const loading = useRef(false),
-    skipInitialLoad = useRef(!!initialObservedAt);
+    skipInitialLoad = useRef(!!initialObservedAt && !initialQuery);
 
   function prepareAction(order: Order, status: string) {
     setAction({ order, status });

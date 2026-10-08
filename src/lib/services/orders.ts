@@ -56,7 +56,15 @@ export async function listOrders(
      from public.orders
      where tenant_id=$1
        and ($2='' or order_status=$2)
-       and (customer_name_snapshot ilike $3 or order_number::text ilike $3)
+       and (
+         customer_name_snapshot ilike $3
+         or customer_phone_snapshot ilike $3
+         or order_number::text ilike $3
+         or exists (
+           select 1 from public.order_items i
+           where i.tenant_id=orders.tenant_id and i.order_id=orders.id and i.name_snapshot ilike $3
+         )
+       )
      order by created_at desc,id
      limit 20 offset $4`,
     [tenantId, status, "%" + search + "%", (page - 1) * 20],
