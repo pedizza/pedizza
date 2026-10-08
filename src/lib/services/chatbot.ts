@@ -56,6 +56,7 @@ type BotContext = {
   page?: number;
   previousStep?: string;
   pendingOrder?: NaturalOrder;
+  continueSelectedCategory?: boolean;
 };
 type Conversation = {
   id: string;
@@ -97,7 +98,11 @@ function shouldInterpretMessage(step: string, text: string) {
   if (!text.trim() || /^\d+$/.test(normalizeText(text))) return false;
   const normalized = normalizeText(text);
   // Menu commands are deterministic; avoid an LLM round trip before advancing.
-  if (step === "main_menu" && mainMenuOption(normalized)) return false;
+  if (
+    ["main_menu", "browsing_products"].includes(step) &&
+    mainMenuOption(normalized)
+  )
+    return false;
   if (
     [
       "awaiting_category",
@@ -798,6 +803,11 @@ export async function processBotMessage(
         return joinBlocks("Como podemos ajudar?", prompts.main_menu);
       if (step === "awaiting_product")
         return categoryCatalog("Responda com o número ou o nome do produto.");
+      if (step === "browsing_products")
+        return joinBlocks(
+          await categoryCatalog(""),
+          "Para pedir um sabor desta categoria, digite 1️⃣. Para ver todas as categorias, digite MENU.",
+        );
       if (step === "awaiting_second_flavor")
         return secondFlavorCatalog(
           "Responda com o número ou o nome do segundo sabor.",
@@ -843,6 +853,49 @@ export async function processBotMessage(
         prompts[step] || "Vamos continuar de onde paramos 😊",
         kind ? await options(kind) : undefined,
       );
+    }
+
+    async function startOrderFromSelectedCategory() {
+      if (!isOpen) {
+        reply =
+          store?.closed_message ||
+          "Estamos fechados neste momento. Você pode consultar o cardápio ou falar com a equipe.";
+        return;
+      }
+      if (!context.categoryId) {
+        step = "browsing_category";
+        reply = joinBlocks(prompts[step], await options("category"));
+        return;
+      }
+      if (!customer?.name) {
+        context.continueSelectedCategory = true;
+        step = "awaiting_name";
+        reply = prompts[step];
+        return;
+      }
+      context.continueSelectedCategory = false;
+      context.cartId = await ensureCart(
+        db,
+        tenant,
+        c!.id,
+        c!.customer_id,
+        "pickup",
+      );
+      context.address = undefined;
+      context.page = 0;
+      step = "awaiting_product";
+      reply = joinBlocks(
+        "Qual sabor você gostaria? 😋\n\nDigite o número ou o nome do sabor. Para ver todas as categorias, digite MENU.",
+        await categoryCatalog(""),
+      );
+      const category = await one<{ allow_split: boolean }>(
+        db,
+        "select allow_split from public.menu_categories where tenant_id=$1 and id=$2 and active and archived_at is null",
+        [tenant, context.categoryId],
+      );
+      if (category?.allow_split)
+        followUp =
+          "🍕 *Também dá para escolher dois sabores!*\n\nEscolha o primeiro sabor e o tamanho; depois, se quiser, selecione 1️⃣ Sim para adicionar outro sabor do mesmo tamanho. 😋";
     }
 
     async function latestOrderMessage() {
@@ -1313,9 +1366,18 @@ export async function processBotMessage(
       step = "main_menu";
       reply = joinBlocks("Rascunho cancelado.", prompts.main_menu);
     } else if (normalized === "menu") {
-      step = "main_menu";
-      reply = menu.text;
-      replyList = menu.list;
+      if (["browsing_products", "awaiting_product"].includes(step)) {
+        context.categoryId = undefined;
+        context.categoryName = undefined;
+        context.productIds = undefined;
+        context.page = 0;
+        step = "browsing_category";
+        reply = joinBlocks(prompts[step], await options("category"));
+      } else {
+        step = "main_menu";
+        reply = menu.text;
+        replyList = menu.list;
+      }
     } else if (externalError) {
       if (naturalOrder?.flavors.length) {
         await applyNaturalOrder(naturalOrder);
@@ -1529,6 +1591,9 @@ export async function processBotMessage(
               ? `Pedido #${last.order_number}: ${orderLabels[last.order_status]}`
               : "Você ainda não tem pedidos.";
           } else if (mainMenuOption(normalized) === "2") {
+            context.categoryId = undefined;
+            context.categoryName = undefined;
+            context.productIds = undefined;
             step = "browsing_category";
             context.page = 0;
             reply = joinBlocks(prompts[step], await options("category"));
@@ -1574,6 +1639,8 @@ export async function processBotMessage(
               customer_name: text.trim(),
             };
             await applyNaturalOrder(pending);
+          } else if (context.continueSelectedCategory) {
+            await startOrderFromSelectedCategory();
           } else {
             context.cartId = await ensureCart(
               db,
@@ -1870,10 +1937,21 @@ export async function processBotMessage(
           }
           context.categoryId = selected()!.id;
           context.categoryName = selected()!.name;
-          reply = await categoryCatalog(
-            "Digite 1️⃣ para fazer um pedido ou MENU para voltar.",
-          );
-          step = "main_menu";
+          context.productIds = undefined;
+          step = "browsing_products";
+          reply = await categoryCatalog("");
+          followUp =
+            "Esses são os sabores desta categoria 😊\n\nDigite 1️⃣ para pedir um deles ou MENU para ver todas as categorias.";
+          break;
+        case "browsing_products":
+          if (mainMenuOption(normalized) === "1") {
+            await startOrderFromSelectedCategory();
+          } else {
+            reply = joinBlocks(
+              await categoryCatalog(""),
+              "Para pedir um sabor desta categoria, digite 1️⃣. Para ver outras categorias, digite MENU.",
+            );
+          }
           break;
         case "awaiting_product":
           if (!selected()) {
