@@ -10,13 +10,10 @@ export default async function Page() {
     const observed = await one<{
       observed_at: string;
       status_mode: string;
-      trigger_mode: string;
     }>(
       db,
-      `select to_char(clock_timestamp() at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') observed_at,s.status_mode,
-              coalesce(p.trigger_mode,'manual') trigger_mode
+      `select to_char(clock_timestamp() at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') observed_at,s.status_mode
        from public.store_settings s
-       left join public.print_settings p on p.tenant_id=s.tenant_id
        where s.tenant_id=$1`,
       [ctx.tenantId],
     );
@@ -40,7 +37,7 @@ export default async function Page() {
       <OrdersBoard
         tenantId={ctx.tenantId}
         permissions={ctx.permissions}
-        autoPrint={initial.observed?.trigger_mode === "on_accept"}
+        autoPrint={ctx.permissions.includes("orders.print")}
         initialOrders={initial.data}
         initialTotal={initial.total}
         initialObservedAt={initial.observed?.observed_at}

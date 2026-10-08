@@ -74,6 +74,10 @@ export function OrdersBoard({
   const loading = useRef(false),
     skipInitialLoad = useRef(!!initialObservedAt);
 
+  function prepareAction(order: Order, status: string) {
+    setAction({ order, status });
+  }
+
   useEffect(() => {
     const timer = setTimeout(() => setQuery(search), 250);
     return () => clearTimeout(timer);
@@ -296,63 +300,132 @@ export function OrdersBoard({
               )}
               {orders
                 .filter((o) => g.statuses.includes(o.order_status))
-                .map((o) => (
-                  <article className="order-card" key={o.id}>
-                    <div className="row between">
-                      <strong className="order-number">
-                        #{o.order_number}
-                      </strong>
-                      <small>
-                        {new Date(o.created_at).toLocaleTimeString("pt-BR", {
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
-                      </small>
-                    </div>
-                    <h3 style={{ margin: "16px 0 5px" }}>
-                      {o.customer_name_snapshot}
-                    </h3>
-                    <div className="order-service">
-                      <span>
-                        {o.service_type === "delivery" ? (
-                          <Bike size={14} />
-                        ) : (
-                          <Store size={14} />
-                        )}
-                        {o.service_type === "delivery" ? "Entrega" : "Retirada"}
-                      </span>
-                      <small>{orderLabels[o.order_status]}</small>
-                    </div>
-                    <div className="row between order-payment">
-                      <strong>{formatCurrency(o.total_cents)}</strong>
-                      <span
-                        className={`badge ${o.payment_status === "paid" ? "green" : "amber"}`}
-                      >
-                        {paymentLabels[o.payment_status]}
-                      </span>
-                    </div>
-                    {o.payment_method_type === "cash" && o.change_for_cents && (
-                      <p style={{ margin: "-8px 0 16px" }}>
-                        Troco a devolver:{" "}
-                        <strong>
-                          {formatCurrency(
-                            calculateChange(o.change_for_cents, o.total_cents),
-                          )}
+                .map((o) => {
+                  const nextStatus = nextOrderStatus(
+                    o.order_status,
+                    o.service_type,
+                  );
+                  const canAdvance =
+                    !!nextStatus &&
+                    permissions.includes(
+                      o.order_status === "new"
+                        ? "orders.accept"
+                        : "orders.update_status",
+                    );
+                  const canRefuse =
+                    o.order_status === "new" &&
+                    permissions.includes("orders.refuse");
+                  const canCancel =
+                    ![
+                      "new",
+                      "cancelled",
+                      "refused",
+                      "delivered",
+                      "picked_up",
+                    ].includes(o.order_status) &&
+                    permissions.includes("orders.cancel");
+                  return (
+                    <article className="order-card" key={o.id}>
+                      <div className="row between">
+                        <strong className="order-number">
+                          #{o.order_number}
                         </strong>
-                      </p>
-                    )}
-                    <button
-                      className="btn secondary small"
-                      style={{ width: "100%" }}
-                      onClick={() => inspect(o.id)}
-                    >
-                      {o.order_status === "new"
-                        ? "Conferir pedido"
-                        : "Ver detalhes"}{" "}
-                      <ArrowRight size={14} />
-                    </button>
-                  </article>
-                ))}
+                        <small>
+                          {new Date(o.created_at).toLocaleTimeString("pt-BR", {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </small>
+                      </div>
+                      <h3 style={{ margin: "16px 0 5px" }}>
+                        {o.customer_name_snapshot}
+                      </h3>
+                      <div className="order-service">
+                        <span>
+                          {o.service_type === "delivery" ? (
+                            <Bike size={14} />
+                          ) : (
+                            <Store size={14} />
+                          )}
+                          {o.service_type === "delivery"
+                            ? "Entrega"
+                            : "Retirada"}
+                        </span>
+                        <small>{orderLabels[o.order_status]}</small>
+                      </div>
+                      <div className="row between order-payment">
+                        <strong>{formatCurrency(o.total_cents)}</strong>
+                        <span
+                          className={`badge ${o.payment_status === "paid" ? "green" : "amber"}`}
+                        >
+                          {paymentLabels[o.payment_status]}
+                        </span>
+                      </div>
+                      {o.payment_method_type === "cash" &&
+                        o.change_for_cents && (
+                          <p style={{ margin: "-8px 0 16px" }}>
+                            Troco a devolver:{" "}
+                            <strong>
+                              {formatCurrency(
+                                calculateChange(
+                                  o.change_for_cents,
+                                  o.total_cents,
+                                ),
+                              )}
+                            </strong>
+                          </p>
+                        )}
+                      <div className="order-card-actions">
+                        {canAdvance && (
+                          <button
+                            className="btn small"
+                            onClick={() => prepareAction(o, nextStatus)}
+                          >
+                            {o.order_status === "new"
+                              ? "Aceitar pedido"
+                              : orderLabels[nextStatus]}
+                            <ArrowRight size={14} />
+                          </button>
+                        )}
+                        {canRefuse && (
+                          <button
+                            className="btn danger small"
+                            onClick={() => prepareAction(o, "refused")}
+                          >
+                            Recusar
+                          </button>
+                        )}
+                        {canCancel && (
+                          <button
+                            className="btn danger small"
+                            onClick={() => prepareAction(o, "cancelled")}
+                          >
+                            Cancelar
+                          </button>
+                        )}
+                        <button
+                          className="btn secondary small order-details-action"
+                          onClick={() => inspect(o.id)}
+                        >
+                          {o.order_status === "new"
+                            ? "Conferir pedido"
+                            : "Ver detalhes"}
+                        </button>
+                        {permissions.includes("orders.print") && (
+                          <Link
+                            className="btn secondary small order-print-action"
+                            href={`/app/pedidos/${o.id}/imprimir`}
+                            target="_blank"
+                            aria-label={`Imprimir pedido ${o.order_number}`}
+                            title="Imprimir pedido"
+                          >
+                            <Printer size={15} />
+                          </Link>
+                        )}
+                      </div>
+                    </article>
+                  );
+                })}
             </section>
           ))}
         </div>

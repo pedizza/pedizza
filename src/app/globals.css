@@ -3895,7 +3895,7 @@ textarea::placeholder {
   background: #f5f5f5;
 }
 .resource-heading > .btn,
-.orders-workspace .btn:not(.secondary):not(.ghost) {
+.orders-workspace .btn:not(.secondary):not(.ghost):not(.danger) {
   background: var(--red);
 }
 .auth-story {
@@ -3940,10 +3940,38 @@ textarea::placeholder {
   background: #fff2ef;
   border-color: #efd9d3;
 }
-.kanban-column.stage-0 .order-card > .btn {
+.kanban-column.stage-0 .order-card > .btn:not(.danger):not(.secondary) {
   background: var(--red);
   color: white;
   border-color: var(--red);
+}
+.orders-workspace .btn.danger,
+.order-card .btn.danger {
+  background: #fff0ee;
+  color: #a91e18;
+  border-color: #f1c9c5;
+}
+.orders-workspace .btn.danger:hover,
+.order-card .btn.danger:hover {
+  background: #ffe3df;
+  color: #8f1712;
+  border-color: #e8aaa4;
+}
+.order-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 12px;
+}
+.order-card-actions > .btn {
+  flex: 1 1 auto;
+}
+.order-card-actions .order-details-action {
+  flex-basis: 100%;
+}
+.order-card-actions .order-print-action {
+  flex: 0 0 40px;
+  padding-inline: 8px;
 }
 .order-card h3 {
   font-weight: 700;
