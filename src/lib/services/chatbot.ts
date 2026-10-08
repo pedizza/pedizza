@@ -656,6 +656,24 @@ export async function processBotMessage(
           )
         : "Nenhum produto disponível nesta categoria.";
     }
+    async function productSelectionCatalog(footer = "") {
+      const isBeverageCategory = normalizeText(
+        context.categoryName || "",
+      ).includes("bebida");
+      const itemNoun = isBeverageCategory ? "bebida" : "sabor";
+      followUp = `Qual ${itemNoun} você gostaria? 😋\n\nResponda com o número ou escreva o nome da ${itemNoun}.`;
+      const category = context.categoryId
+        ? await one<{ allow_split: boolean }>(
+            db,
+            "select allow_split from public.menu_categories where tenant_id=$1 and id=$2 and active and archived_at is null",
+            [tenant, context.categoryId],
+          )
+        : null;
+      if (category?.allow_split)
+        secondFollowUp =
+          "🍕 *Quer dois sabores?*\n\nEscolha o primeiro sabor agora. Depois de escolher o tamanho, confirme em 1️⃣ Sim. Em seguida, escolha a categoria e o segundo sabor do mesmo tamanho. 😋";
+      return categoryCatalog(footer);
+    }
     async function secondFlavorCatalog(footer: string) {
       const products = await rows<CatalogProduct>(
         db,
@@ -798,10 +816,7 @@ export async function processBotMessage(
       if (step === "main_menu")
         return joinBlocks("Como podemos ajudar?", prompts.main_menu);
       if (step === "awaiting_product")
-        return joinBlocks(
-          "Qual sabor você gostaria? 😋\n\nResponda com o número ou escreva o nome do sabor.",
-          await categoryCatalog(""),
-        );
+        return productSelectionCatalog();
       if (step === "browsing_products")
         return joinBlocks(
           await categoryCatalog(""),
@@ -883,17 +898,7 @@ export async function processBotMessage(
       context.address = undefined;
       context.page = 0;
       step = "awaiting_product";
-      reply = await categoryCatalog("");
-      followUp =
-        "Qual sabor você gostaria? 😋\n\nResponda com o número ou escreva o nome do sabor. Para ver todas as categorias, digite MENU.";
-      const category = await one<{ allow_split: boolean }>(
-        db,
-        "select allow_split from public.menu_categories where tenant_id=$1 and id=$2 and active and archived_at is null",
-        [tenant, context.categoryId],
-      );
-      if (category?.allow_split)
-        secondFollowUp =
-          "🍕 *Quer dois sabores?*\n\nEscolha o primeiro sabor agora. Depois de escolher o tamanho, confirme em 1️⃣ Sim. Em seguida, escolha a categoria e o segundo sabor do mesmo tamanho. 😋";
+      reply = await productSelectionCatalog();
     }
 
     async function latestOrderMessage() {
@@ -1909,17 +1914,7 @@ export async function processBotMessage(
           context.secondCategoryName = undefined;
           context.page = 0;
           step = "awaiting_product";
-          reply = await categoryCatalog("");
-          followUp =
-            "Qual sabor você gostaria? 😋\n\nResponda com o número ou escreva o nome do sabor.";
-          const category = await one<{ allow_split: boolean }>(
-            db,
-            "select allow_split from public.menu_categories where tenant_id=$1 and id=$2 and active and archived_at is null",
-            [tenant, context.categoryId],
-          );
-          if (category?.allow_split)
-            secondFollowUp =
-              "🍕 *Quer dois sabores?*\n\nEscolha o primeiro sabor agora. Depois de escolher o tamanho, confirme em 1️⃣ Sim. Em seguida, escolha a categoria e o segundo sabor do mesmo tamanho. 😋";
+          reply = await productSelectionCatalog();
           break;
         case "browsing_category":
           if (!selected()) {
@@ -1954,9 +1949,8 @@ export async function processBotMessage(
           break;
         case "awaiting_product":
           if (!selected()) {
-            reply = joinBlocks(
-              "Não encontrei essa opção na lista 😅\n\nQual sabor você gostaria? Responda com o número ou escreva o nome do sabor.",
-              await categoryCatalog(""),
+            reply = await productSelectionCatalog(
+              "Não encontrei essa opção na lista 😅",
             );
             break;
           }
