@@ -30,7 +30,7 @@ function string(value: unknown) {
   return typeof value === "string" ? value : "";
 }
 
-export function mainMenuOption(input: string): "1" | "2" | "3" | null {
+export function mainMenuOption(input: string): "1" | "2" | null {
   const text = normalizeText(input).replace(/[!,?.]+/g, "");
   if (
     /\b(fazer (um |o )?pedido|quero (fazer )?(um |o )?pedido|quero pedir|montar (um |o )?pedido)\b/.test(
@@ -38,13 +38,12 @@ export function mainMenuOption(input: string): "1" | "2" | "3" | null {
     )
   )
     return "1";
-  if (/\b(ver|mostrar|abrir) (o )?cardapio\b/.test(text)) return "2";
   if (
     /\b(acompanhar (meu |o )?pedido|status (do |de meu )?pedido|rastrear (meu |o )?pedido)\b/.test(
       text,
     )
   )
-    return "3";
+    return "2";
   if (
     /^(1|pedido|pedir|fazer (um |o )?pedido|quero (fazer (um |o )?pedido|pedir))( por favor)?$/.test(
       text,
@@ -52,17 +51,11 @@ export function mainMenuOption(input: string): "1" | "2" | "3" | null {
   )
     return "1";
   if (
-    /^(2|cardapio|ver (o )?cardapio|quero ver (o )?cardapio)( por favor)?$/.test(
+    /^(2|acompanhar (meu |o )?pedido|meu pedido|status do pedido|rastrear (meu |o )?pedido)( por favor)?$/.test(
       text,
     )
   )
     return "2";
-  if (
-    /^(3|acompanhar (meu |o )?pedido|meu pedido|status do pedido|rastrear (meu |o )?pedido)( por favor)?$/.test(
-      text,
-    )
-  )
-    return "3";
   return null;
 }
 

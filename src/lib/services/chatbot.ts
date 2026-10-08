@@ -181,7 +181,7 @@ function localInterpretation(
 }
 
 const prompts: Record<string, string> = {
-  main_menu: "1️⃣ Fazer pedido\n2️⃣ Ver cardápio\n3️⃣ Acompanhar pedido",
+  main_menu: "1️⃣ Fazer pedido\n2️⃣ Acompanhar pedido",
   awaiting_name:
     "Perfeito, vamos começar a anotar seu pedido! 🍕\n\nQual seu nome, por gentileza? 😊",
   awaiting_service:
@@ -266,14 +266,9 @@ function mainMenu(
               rowId: "1",
             },
             {
-              title: "Ver cardápio",
-              description: "Confira nossos produtos",
-              rowId: "2",
-            },
-            {
               title: "Acompanhar pedido",
               description: "Veja o status do seu pedido",
-              rowId: "3",
+              rowId: "2",
             },
           ],
         },
@@ -572,6 +567,7 @@ export async function processBotMessage(
     let step = c.current_step;
     let reply = "";
     let followUp = "";
+    let secondFollowUp = "";
     let handoff = false;
     let replyList: WhatsAppList | undefined;
     const hours = await rows<BusinessHour>(
@@ -1578,7 +1574,7 @@ export async function processBotMessage(
     } else
       switch (step) {
         case "main_menu":
-          if (mainMenuOption(normalized) === "3") {
+          if (mainMenuOption(normalized) === "2") {
             const last = await one<{
               order_number: number;
               order_status: string;
@@ -1590,13 +1586,6 @@ export async function processBotMessage(
             reply = last
               ? `Pedido #${last.order_number}: ${orderLabels[last.order_status]}`
               : "Você ainda não tem pedidos.";
-          } else if (mainMenuOption(normalized) === "2") {
-            context.categoryId = undefined;
-            context.categoryName = undefined;
-            context.productIds = undefined;
-            step = "browsing_category";
-            context.page = 0;
-            reply = joinBlocks(prompts[step], await options("category"));
           } else if (mainMenuOption(normalized) === "1") {
             if (!isOpen) {
               reply =
@@ -1942,6 +1931,14 @@ export async function processBotMessage(
           reply = await categoryCatalog("");
           followUp =
             "Esses são os sabores desta categoria 😊\n\nDigite 1️⃣ para pedir um deles ou MENU para ver todas as categorias.";
+          const browseCategory = await one<{ allow_split: boolean }>(
+            db,
+            "select allow_split from public.menu_categories where tenant_id=$1 and id=$2 and active and archived_at is null",
+            [tenant, context.categoryId],
+          );
+          if (browseCategory?.allow_split)
+            secondFollowUp =
+              "🍕 *Quer pedir dois sabores?* Depois de escolher o primeiro sabor e o tamanho, responda 1️⃣ Sim quando eu perguntar se deseja adicionar outro. Aí é só escolher o segundo sabor do mesmo tamanho 😊";
           break;
         case "browsing_products":
           if (mainMenuOption(normalized) === "1") {
@@ -2375,6 +2372,13 @@ export async function processBotMessage(
         conversationId: c.id,
         sender: "bot",
         text: followUp,
+        epoch: c.bot_epoch,
+      });
+    if (secondFollowUp)
+      await enqueue(db, tenant, "message", "bot:" + messageId + ":followup2", {
+        conversationId: c.id,
+        sender: "bot",
+        text: secondFollowUp,
         epoch: c.bot_epoch,
       });
   });
