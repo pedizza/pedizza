@@ -656,11 +656,18 @@ export async function processBotMessage(
           )
         : "Nenhum produto disponível nesta categoria.";
     }
+    function isBeverageCategory() {
+      return normalizeText(context.categoryName || "").includes("bebida");
+    }
+    function askForObservation() {
+      step = "awaiting_observation";
+      reply = joinBlocks(
+        namedMessage(customer?.name, "Anotei o seu pedido! 📝"),
+        prompts[step],
+      );
+    }
     async function productSelectionCatalog(footer = "") {
-      const isBeverageCategory = normalizeText(
-        context.categoryName || "",
-      ).includes("bebida");
-      const itemNoun = isBeverageCategory ? "bebida" : "sabor";
+      const itemNoun = isBeverageCategory() ? "bebida" : "sabor";
       followUp = `Qual ${itemNoun} você gostaria? 😋\n\nResponda com o número ou escreva o nome da ${itemNoun}.`;
       const category = context.categoryId
         ? await one<{ allow_split: boolean }>(
@@ -669,7 +676,7 @@ export async function processBotMessage(
             [tenant, context.categoryId],
           )
         : null;
-      if (category?.allow_split)
+      if (category?.allow_split && !isBeverageCategory())
         secondFollowUp =
           "🍕 *Quer dois sabores?*\n\nEscolha o primeiro sabor agora. Depois de escolher o tamanho, confirme em 1️⃣ Sim. Em seguida, escolha a categoria e o segundo sabor do mesmo tamanho. 😋";
       return categoryCatalog(footer);
@@ -817,6 +824,11 @@ export async function processBotMessage(
         return joinBlocks("Como podemos ajudar?", prompts.main_menu);
       if (step === "awaiting_product")
         return productSelectionCatalog();
+      if (step === "awaiting_border" && isBeverageCategory())
+        return joinBlocks(
+          namedMessage(customer?.name, "Anotei o seu pedido! 📝"),
+          prompts.awaiting_observation,
+        );
       if (step === "browsing_products")
         return joinBlocks(
           await categoryCatalog(""),
@@ -1964,6 +1976,8 @@ export async function processBotMessage(
           if (context.options?.length) {
             step = "awaiting_size";
             reply = joinBlocks(prompts[step], sizes);
+          } else if (isBeverageCategory()) {
+            askForObservation();
           } else {
             step = "awaiting_border";
             reply = joinBlocks(prompts[step], await options("border"));
@@ -1975,6 +1989,10 @@ export async function processBotMessage(
             break;
           }
           context.sizeId = selected()!.id;
+          if (isBeverageCategory()) {
+            askForObservation();
+            break;
+          }
           const split = await one<{
             allow_split: boolean;
             max_flavors: number;
@@ -2042,6 +2060,11 @@ export async function processBotMessage(
           reply = joinBlocks(prompts[step], await options("border"));
           break;
         case "awaiting_border":
+          if (isBeverageCategory()) {
+            context.borderId = null;
+            askForObservation();
+            break;
+          }
           const withoutBorder = isChoice(
             normalized,
             "0",
