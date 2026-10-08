@@ -181,7 +181,7 @@ function localInterpretation(
 }
 
 const prompts: Record<string, string> = {
-  main_menu: "1️⃣ Fazer pedido\n2️⃣ Acompanhar pedido",
+  main_menu: "1️⃣ Ver cardápio e pedir\n2️⃣ Acompanhar pedido",
   awaiting_name:
     "Perfeito, vamos começar a anotar seu pedido! 🍕\n\nQual seu nome, por gentileza? 😊",
   awaiting_service:
@@ -261,8 +261,8 @@ function mainMenu(
           title: "Opções",
           rows: [
             {
-              title: "Fazer pedido",
-              description: "Monte seu pedido",
+              title: "Ver cardápio e pedir",
+              description: "Confira os sabores e monte seu pedido",
               rowId: "1",
             },
             {
