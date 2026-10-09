@@ -1,4 +1,13 @@
 .aws/
+.git/
+.next/
+.local/
+node_modules/
+dist/
+coverage/
+playwright-report/
+test-results/
+*.tsbuildinfo
 /df0c92c3-b9b4-47b8-a6cb-adc3686ff211.png
 /referencia d.png
 /toque pedido novo.mp3
