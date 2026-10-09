@@ -1241,7 +1241,91 @@ small {
 .receipt hr {
   border: 0;
   border-top: 1px dashed black;
-  margin: 12px 0;
+  margin: 16px 0;
+}
+.receipt-header {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  margin: 0 0 18px;
+  text-align: center;
+}
+.receipt-header img {
+  display: block;
+  width: auto;
+  max-width: 46mm;
+  height: auto;
+  max-height: 22mm;
+  margin: 0 auto 6px;
+  object-fit: contain;
+}
+.receipt-header h2,
+.receipt-header p,
+.receipt h1,
+.receipt h2,
+.receipt h3,
+.receipt p {
+  margin: 0;
+}
+.receipt-header h2 {
+  font-size: 16px;
+}
+.receipt-header p {
+  font-size: 11px;
+  letter-spacing: 0.04em;
+}
+.receipt > h1 {
+  margin: 0 0 5px;
+  font-size: 22px;
+  line-height: 1.25;
+}
+.receipt-date {
+  display: block;
+  margin-top: 4px;
+}
+.receipt-customer,
+.receipt-items,
+.receipt-totals,
+.receipt-block {
+  display: grid;
+  gap: 5px;
+  margin: 14px 0;
+}
+.receipt-items h3 {
+  margin: 0 0 4px;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.receipt-item {
+  display: grid;
+  gap: 4px;
+  padding: 6px 0 10px;
+  line-height: 1.4;
+}
+.receipt-item-price {
+  margin-top: 2px;
+}
+.receipt-totals p,
+.receipt-totals h2 {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 0;
+}
+.receipt-totals h2 {
+  padding-top: 5px;
+  font-size: 17px;
+}
+.receipt-block {
+  gap: 5px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.receipt-thanks {
+  margin: 14px 0 0 !important;
+  text-align: center;
+  line-height: 1.45;
 }
 @media (max-width: 1100px) {
   .sidebar {

@@ -5,7 +5,9 @@ import { transaction, one, rows } from "@/lib/db";
 import { orderColumns, type Order } from "@/lib/services/orders";
 import { calculateChange, formatCurrency } from "@/lib/domain/money";
 import { paymentLabels } from "@/lib/domain/orders";
+import { formatAddress } from "@/lib/domain/address";
 import { PrintButton } from "@/components/print-button";
+import Image from "next/image";
 export default async function Page({
   params,
   searchParams,
@@ -66,64 +68,97 @@ export default async function Page({
           }}
           key={i}
         >
-          <h2>{ctx.tenantName}</h2>
-          <p>COMPROVANTE NÃO FISCAL</p>
+          <header className="receipt-header">
+            {ctx.hasStoreLogo && ctx.storeSettingsId && (
+              <Image
+                src={`/api/images?resource=loja&id=${ctx.storeSettingsId}`}
+                width={180}
+                height={90}
+                unoptimized
+                alt={`Logotipo da ${ctx.tenantName}`}
+              />
+            )}
+            <h2>{ctx.tenantName}</h2>
+            <p>CUPOM NÃO FISCAL</p>
+          </header>
           <h1>Pedido #{o.order_number}</h1>
-          <small>
+          <small className="receipt-date">
             {new Date(o.created_at).toLocaleString("pt-BR", {
               timeZone: "America/Sao_Paulo",
             })}
           </small>
           <hr />
-          <strong>{o.customer_name_snapshot}</strong>
-          {settings?.show_customer_phone && <p>{o.customer_phone_snapshot}</p>}
-          {result.items.map((item) => (
-            <div key={item.id}>
-              <p>
+          <section className="receipt-customer">
+            <strong>{o.customer_name_snapshot}</strong>
+            {settings?.show_customer_phone && (
+              <span>{o.customer_phone_snapshot}</span>
+            )}
+          </section>
+          <section className="receipt-items">
+            <h3>Produtos</h3>
+            {result.items.map((item) => (
+              <div className="receipt-item" key={item.id}>
                 <strong>
                   {item.quantity}x {item.size_name_snapshot}{" "}
                   {item.name_snapshot}
                 </strong>
-                <br />
-                {item.border_name_snapshot}
-                <br />
-                {settings?.show_observations && item.observation}
-                <br />
-                {formatCurrency(item.quantity * item.unit_price_cents)}
-              </p>
-            </div>
-          ))}
+                {item.border_name_snapshot && (
+                  <span>{item.border_name_snapshot}</span>
+                )}
+                {settings?.show_observations && item.observation && (
+                  <span>Observação: {item.observation}</span>
+                )}
+                <strong className="receipt-item-price">
+                  {formatCurrency(item.quantity * item.unit_price_cents)}
+                </strong>
+              </div>
+            ))}
+          </section>
           <hr />
-          <p>
-            Subtotal: {formatCurrency(o.subtotal_cents)}
-            <br />
-            {settings?.show_discount && (
-              <>
-                Desconto: {formatCurrency(o.discount_cents)}
-                <br />
-              </>
-            )}
-            Entrega: {formatCurrency(o.delivery_fee_cents)}
-          </p>
-          <h2>Total: {formatCurrency(o.total_cents)}</h2>
-          {settings?.show_address && (
+          <section className="receipt-totals">
             <p>
-              {o.service_type === "pickup"
-                ? "RETIRADA NO LOCAL"
-                : Object.values(o.delivery_address_snapshot || {})
-                    .filter(Boolean)
-                    .join(", ")}
+              <span>Subtotal</span>
+              <strong>{formatCurrency(o.subtotal_cents)}</strong>
             </p>
+            {settings?.show_discount && (
+              <p>
+                <span>Desconto</span>
+                <strong>{formatCurrency(o.discount_cents)}</strong>
+              </p>
+            )}
+            <p>
+              <span>Entrega</span>
+              <strong>{formatCurrency(o.delivery_fee_cents)}</strong>
+            </p>
+            <h2>
+              <span>Total</span>
+              <strong>{formatCurrency(o.total_cents)}</strong>
+            </h2>
+          </section>
+          {settings?.show_address && (
+            <section className="receipt-block">
+              <strong>
+                {o.service_type === "pickup"
+                  ? "Retirada"
+                  : "Endereço de entrega"}
+              </strong>
+              <span>
+                {o.service_type === "pickup"
+                  ? "Retirada no local"
+                  : formatAddress(o.delivery_address_snapshot)}
+              </span>
+            </section>
           )}
           {settings?.show_payment && (
-            <p>
-              {o.payment_method_name_snapshot} ·{" "}
-              {paymentLabels[o.payment_status]}
+            <section className="receipt-block">
+              <strong>Formas de pagamento</strong>
+              <span>
+                {o.payment_method_name_snapshot} ·{" "}
+                {paymentLabels[o.payment_status]}
+              </span>
               {o.change_for_cents && (
                 <>
-                  <br />
-                  Troco para {formatCurrency(o.change_for_cents)}
-                  <br />
+                  <span>Troco para {formatCurrency(o.change_for_cents)}</span>
                   <strong>
                     Troco a devolver:{" "}
                     {formatCurrency(
@@ -132,10 +167,12 @@ export default async function Page({
                   </strong>
                 </>
               )}
-            </p>
+            </section>
           )}
           <hr />
-          <p>Obrigado por escolher nossa pizzaria!</p>
+          <p className="receipt-thanks">
+            Obrigado por escolher nossa pizzaria!
+          </p>
         </article>
       ))}
     </>
