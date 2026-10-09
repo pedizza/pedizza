@@ -47,6 +47,7 @@ export function AppShell({
   children: React.ReactNode;
 }) {
   const path = usePathname();
+  const isOverview = path.startsWith("/app/visao-geral");
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const menuTrigger = useRef<HTMLButtonElement>(null);
@@ -211,7 +212,9 @@ export function AppShell({
         </div>
       </aside>
       <div className="shell-main">
-        <header className="topbar">
+        <header
+          className={`topbar ${isOverview ? "overview-global-topbar" : ""}`}
+        >
           <div className="row">
             <button
               ref={menuTrigger}
@@ -250,7 +253,7 @@ export function AppShell({
               <span className="topbar-title">{ctx.tenantName}</span>
             )}
             <ChevronDown size={13} className="desktop-only muted" />
-            {ctx.permissions.includes("notifications.view") && (
+            {ctx.permissions.includes("notifications.view") && !isOverview && (
               <NotificationBell tenantId={ctx.tenantId} />
             )}
           </div>

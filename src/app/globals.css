@@ -4495,7 +4495,7 @@ textarea:focus {
   grid-template-columns: minmax(240px, 1fr) auto;
   align-items: center;
   gap: 28px;
-  margin: -12px 0 24px;
+  margin: 0 0 30px;
 }
 .dashboard-search {
   position: relative;
@@ -4937,6 +4937,59 @@ textarea:focus {
 .recent-order-time svg {
   color: #50658a;
 }
+.shell[data-module="visao-geral"] .shell-main {
+  background: #f6f9fd;
+}
+.overview-workspace .stat-sales .stat-trend.neutral {
+  color: #00a73c;
+  background: #edfff3;
+}
+.overview-workspace .stat-orders .stat-trend.neutral {
+  color: #df2530;
+  background: #fff0f1;
+}
+.overview-workspace .stat-ticket .stat-trend.neutral {
+  color: #e79300;
+  background: #fff7e8;
+}
+.overview-workspace .stat-customers .stat-trend.neutral {
+  color: #8d31ee;
+  background: #f7efff;
+}
+.dashboard-notification-bell {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.dashboard-notification-bell .icon-button {
+  width: 42px;
+  height: 42px;
+  border: 0;
+  background: transparent;
+  color: #172449;
+}
+.dashboard-notification-bell .icon-button > span {
+  width: 12px;
+  height: 12px;
+  min-width: 12px;
+  padding: 0 !important;
+  overflow: hidden;
+  border: 2px solid white;
+  border-radius: 50% !important;
+  background: #e21b24 !important;
+  color: transparent !important;
+  font-size: 0 !important;
+}
+.recent-order-status-dot {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 8px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.products-heading-icon {
+  color: #ed9900;
+}
 @media (max-width: 1100px) {
   .overview-workspace .dashboard-grid {
     grid-template-columns: 1fr;
@@ -4949,7 +5002,21 @@ textarea:focus {
     justify-content: space-between;
   }
 }
+@media (min-width: 761px) {
+  .overview-global-topbar {
+    display: none;
+  }
+  .shell[data-module="visao-geral"] .workspace-content {
+    padding-top: 16px;
+  }
+}
 @media (max-width: 760px) {
+  .overview-global-topbar {
+    display: flex;
+  }
+  .shell[data-module="visao-geral"] .workspace-content {
+    padding-top: 18px;
+  }
   .dashboard-toolbar {
     margin: 0 0 18px;
   }

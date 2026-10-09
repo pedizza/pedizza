@@ -12,13 +12,15 @@ import {
   Bike,
   Store,
   FileText,
-  CircleCheck,
+  ChartNoAxesColumnIncreasing,
+  Trophy,
 } from "lucide-react";
 import { requirePage } from "@/lib/auth/context";
 import { transaction, one, rows } from "@/lib/db";
 import { formatCurrency } from "@/lib/domain/money";
 import { orderLabels } from "@/lib/domain/orders";
 import { PageHeader, EmptyState } from "@/components/ui/states";
+import { NotificationBell } from "@/components/notification-bell";
 export default async function Page({
   searchParams,
 }: {
@@ -83,14 +85,7 @@ export default async function Page({
           created_at: string;
         }>(
           db,
-          "select id,order_number,customer_name_snapshot,customer_phone_snapshot,order_status,total_cents,service_type,created_at from public.orders where tenant_id=$1 order by created_at desc limit 5",
-          [ctx.tenantId],
-        )
-      : [];
-    const customers = ctx.permissions.includes("customers.view")
-      ? await rows<{ id: string; name: string; created_at: string }>(
-          db,
-          "select id,name,created_at from public.customers where tenant_id=$1 and archived_at is null order by created_at desc limit 4",
+          "select id,order_number,customer_name_snapshot,customer_phone_snapshot,order_status,total_cents,service_type,created_at from public.orders where tenant_id=$1 order by created_at desc limit 3",
           [ctx.tenantId],
         )
       : [];
@@ -99,7 +94,7 @@ export default async function Page({
         ? await rows<{ day: string; total: number }>(
             db,
             `select lpad(extract(hour from o.created_at at time zone s.timezone)::int::text,2,'0')||'h' day,
-                    sum(o.total_cents)::bigint total
+                    count(*)::int total
              from public.orders o join public.store_settings s on s.tenant_id=o.tenant_id
              where o.tenant_id=$1 and o.order_status in ('delivered','picked_up')
                and o.created_at >= (date_trunc('day',now() at time zone s.timezone) at time zone s.timezone)
@@ -109,7 +104,7 @@ export default async function Page({
           )
         : await rows<{ day: string; total: number }>(
             db,
-            `select to_char(o.created_at at time zone s.timezone,'DD/MM') as "day",sum(o.total_cents)::bigint total
+            `select to_char(o.created_at at time zone s.timezone,'DD/MM') as "day",count(*)::int total
              from public.orders o join public.store_settings s on s.tenant_id=o.tenant_id
              where o.tenant_id=$1 and o.order_status in ('delivered','picked_up') and o.created_at>=now()-$2*interval '1 day'
              group by 1 order by min(o.created_at)`,
@@ -118,7 +113,7 @@ export default async function Page({
       : [];
     const top = await rows<{ name: string; quantity: number }>(
       db,
-      `select i.name_snapshot name,sum(i.quantity)::int quantity from public.order_items i join public.orders o on o.id=i.order_id and o.tenant_id=i.tenant_id where i.tenant_id=$1 and o.order_status in ('delivered','picked_up') and o.created_at>=now()-$2*interval '1 day' group by i.name_snapshot order by quantity desc limit 5`,
+      `select i.name_snapshot name,sum(i.quantity)::int quantity from public.order_items i join public.orders o on o.id=i.order_id and o.tenant_id=i.tenant_id where i.tenant_id=$1 and o.order_status in ('delivered','picked_up') and o.created_at>=now()-$2*interval '1 day' group by i.name_snapshot order by quantity desc limit 3`,
       [ctx.tenantId, days],
     );
     const whatsapp = ctx.permissions.includes("whatsapp.view")
@@ -128,7 +123,7 @@ export default async function Page({
           [ctx.tenantId],
         )
       : undefined;
-    return { stats, recent, customers, chart, top, whatsapp };
+    return { stats, recent, chart, top, whatsapp };
   });
   const stats = result.stats;
   const percentChange = (current: number, previous: number) =>
@@ -158,7 +153,6 @@ export default async function Page({
       value: stats?.orders || 0,
       Icon: ClipboardList,
       note: "Todos os pedidos recebidos",
-      detail: "No período selecionado",
       change: percentChange(
         Number(stats?.orders || 0),
         Number(stats?.previous_orders || 0),
@@ -171,7 +165,6 @@ export default async function Page({
             value: formatCurrency(stats?.average || 0),
             Icon: TrendingUp,
             note: "Por pedido concluído",
-            detail: "Média dos pedidos concluídos",
             change: percentChange(
               Number(stats?.average || 0),
               Number(stats?.previous_average || 0),
@@ -184,7 +177,6 @@ export default async function Page({
       value: stats?.customers || 0,
       Icon: Users,
       note: "Clientes cadastrados no período",
-      detail: "Novos cadastros",
       change: percentChange(
         Number(stats?.customers || 0),
         Number(stats?.previous_customers || 0),
@@ -260,6 +252,11 @@ export default async function Page({
             <span>{dateLabel}</span>
             <ChevronDown size={15} aria-hidden="true" />
           </div>
+          {ctx.permissions.includes("notifications.view") && (
+            <span className="dashboard-notification-bell">
+              <NotificationBell tenantId={ctx.tenantId} />
+            </span>
+          )}
         </div>
       </div>
       <PageHeader
@@ -269,7 +266,7 @@ export default async function Page({
       <div className={`stats dashboard-stats count-${cards.length}`}>
         {cards.map((c) => (
           <article
-            className={`stat-card ${c.Icon === Banknote ? "stat-sales" : ""}`}
+            className={`stat-card ${c.Icon === Banknote ? "stat-sales" : c.Icon === ClipboardList ? "stat-orders" : c.Icon === TrendingUp ? "stat-ticket" : "stat-customers"}`}
             key={c.label}
           >
             <span
@@ -285,7 +282,7 @@ export default async function Page({
                 >
                   {c.change === null
                     ? "—"
-                    : `${c.change >= 0 ? "↗" : "↘"} ${Math.abs(c.change)}%`}
+                    : `${c.change > 0 ? "↗" : c.change < 0 || c.Icon === ClipboardList ? "↘" : "↗"} ${Math.abs(c.change)}%`}
                 </span>
               </div>
               <div className="stat-value">{c.value}</div>
@@ -303,10 +300,13 @@ export default async function Page({
             <section className="card dashboard-chart-card">
               <div className="card-heading">
                 <h2>
-                  <TrendingUp size={19} aria-hidden="true" />
+                  <ChartNoAxesColumnIncreasing size={19} aria-hidden="true" />
                   Vendas ao longo do período
                 </h2>
-                <span className="chart-filter">Pedidos concluídos</span>
+                <span className="chart-filter">
+                  Pedidos concluídos{" "}
+                  <ChevronDown size={13} aria-hidden="true" />
+                </span>
               </div>
               <div className="dashboard-chart-wrap">
                 <svg
@@ -332,7 +332,7 @@ export default async function Page({
                       <g key={line}>
                         <line x1="42" x2="782" y1={y} y2={y} />
                         <text x="2" y={y + 4}>
-                          {formatCurrency(Math.round((max * (4 - line)) / 4))}
+                          {Math.round((max * (4 - line)) / 4)}
                         </text>
                       </g>
                     );
@@ -340,7 +340,10 @@ export default async function Page({
                   {plot.map((point, index) => {
                     const every =
                       days === 1 ? 2 : Math.max(1, Math.ceil(plot.length / 8));
-                    if (index % every !== 0 && index !== plot.length - 1)
+                    if (
+                      index % every !== 0 &&
+                      !(days !== 1 && index === plot.length - 1)
+                    )
                       return null;
                     return (
                       <g key={`x-${point.day}`}>
@@ -417,7 +420,7 @@ export default async function Page({
                     <span
                       className={`recent-order-status status-${o.order_status}`}
                     >
-                      <CircleCheck size={13} aria-hidden="true" />
+                      <span className="recent-order-status-dot" />
                       {orderLabels[o.order_status]}
                     </span>
                     <span className="recent-order-type">
@@ -432,6 +435,7 @@ export default async function Page({
                       <strong>{formatCurrency(o.total_cents)}</strong>
                     )}
                     <span className="recent-order-time">
+                      Hoje,{" "}
                       {new Intl.DateTimeFormat("pt-BR", {
                         hour: "2-digit",
                         minute: "2-digit",
@@ -498,9 +502,13 @@ export default async function Page({
           <section className="card">
             <div className="card-heading">
               <h2>
-                <span className="products-heading-icon">★</span>
+                <Trophy size={19} aria-hidden="true" />
                 Produtos mais vendidos
               </h2>
+              <Link href="?days=1" className="chart-filter">
+                {days === 1 ? "Hoje" : `${days} dias`}{" "}
+                <ChevronDown size={13} aria-hidden="true" />
+              </Link>
             </div>
             {result.top.length ? (
               result.top.map((p, i) => (
@@ -517,34 +525,6 @@ export default async function Page({
               <EmptyState
                 title="Seus favoritos vão aparecer aqui"
                 description="O ranking é formado pelos pedidos concluídos."
-              />
-            )}
-          </section>
-          <section className="card">
-            <div className="card-heading">
-              <h2>Clientes recentes</h2>
-              {ctx.permissions.includes("customers.view") && (
-                <Link href="/app/clientes">Ver todos</Link>
-              )}
-            </div>
-            {result.customers.length ? (
-              result.customers.map((c) => (
-                <div className="row" key={c.id} style={{ marginTop: 15 }}>
-                  <span className="avatar">
-                    {c.name.slice(0, 2).toUpperCase() || "CL"}
-                  </span>
-                  <div>
-                    <strong>{c.name || "Cliente"}</strong>
-                    <small>
-                      {new Date(c.created_at).toLocaleDateString("pt-BR")}
-                    </small>
-                  </div>
-                </div>
-              ))
-            ) : (
-              <EmptyState
-                title="Novas histórias por aqui"
-                description="Seus clientes aparecerão conforme forem cadastrados."
               />
             )}
           </section>
