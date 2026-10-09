@@ -346,12 +346,44 @@ export async function changeOrder(
     );
     if (["refused", "cancelled"].includes(to))
       invariant(note.trim().length >= 3, "Informe o motivo.");
+    const deliveryPayment =
+      to === "delivered"
+        ? await one<{
+            id: string;
+            status: string;
+            requires_manual_confirmation: boolean | null;
+          }>(
+            db,
+            `select p.id,p.status,m.requires_manual_confirmation
+             from public.payments p
+             join public.orders o
+               on o.tenant_id=p.tenant_id and o.id=p.order_id
+             left join public.payment_methods m
+               on m.tenant_id=o.tenant_id and m.id=o.payment_method_id
+             where p.tenant_id=$1 and p.order_id=$2
+             for update of p`,
+            [ctx.tenantId, id],
+          )
+        : undefined;
+    const confirmDeliveryPayment =
+      !!deliveryPayment &&
+      deliveryPayment.status !== "paid" &&
+      deliveryPayment.status !== "refunded" &&
+      canConfirmManually(
+        order.payment_method_type,
+        deliveryPayment.requires_manual_confirmation || false,
+      );
     const result = await one<Order>(
       db,
-      `update public.orders set order_status=$3,preparation_minutes=case when $3='accepted' then $4 else preparation_minutes end,accepted_at=case when $3='accepted' then now() else accepted_at end,completed_at=case when $3 in ('delivered','picked_up') then now() else completed_at end,cancelled_at=case when $3 in ('cancelled','refused') then now() else cancelled_at end,cancellation_reason=case when $3 in ('cancelled','refused') then $5 else cancellation_reason end where tenant_id=$1 and id=$2 returning ${orderColumns}`,
-      [ctx.tenantId, id, to, minutes, note],
+      `update public.orders set order_status=$3,payment_status=case when $6 then 'paid' else payment_status end,preparation_minutes=case when $3='accepted' then $4 else preparation_minutes end,accepted_at=case when $3='accepted' then now() else accepted_at end,completed_at=case when $3 in ('delivered','picked_up') then now() else completed_at end,cancelled_at=case when $3 in ('cancelled','refused') then now() else cancelled_at end,cancellation_reason=case when $3 in ('cancelled','refused') then $5 else cancellation_reason end where tenant_id=$1 and id=$2 returning ${orderColumns}`,
+      [ctx.tenantId, id, to, minutes, note, confirmDeliveryPayment],
     );
     invariant(result, "Pedido indisponível.");
+    if (confirmDeliveryPayment && deliveryPayment)
+      await db.query(
+        "update public.payments set status='paid',paid_at=coalesce(paid_at,now()),confirmed_by=$3 where tenant_id=$1 and id=$2",
+        [ctx.tenantId, deliveryPayment.id, ctx.userId],
+      );
     await db.query(
       "insert into public.order_status_history(tenant_id,order_id,from_status,to_status,user_id,note) values($1,$2,$3,$4,$5,$6)",
       [ctx.tenantId, id, order.order_status, to, ctx.userId, note],
@@ -361,6 +393,27 @@ export async function changeOrder(
         "update public.coupon_redemptions set status='reversed',reversed_at=now() where tenant_id=$1 and order_id=$2 and status='applied'",
         [ctx.tenantId, id],
       );
+    if (confirmDeliveryPayment && deliveryPayment) {
+      await audit(
+        db,
+        ctx.tenantId,
+        ctx.userId,
+        "payment.manually_confirmed_on_delivery",
+        "payments",
+        deliveryPayment.id,
+      );
+      await notify(
+        db,
+        ctx.tenantId,
+        "payment:" + deliveryPayment.id,
+        "payment.paid",
+        "Pagamento confirmado",
+        `O recebimento do pedido #${order.order_number} foi confirmado ao marcar a entrega.`,
+        "/app/pedidos",
+        "orders.view",
+        id,
+      );
+    }
     if (order.conversation_id)
       await enqueue(db, ctx.tenantId, "message", `order:${id}:${to}`, {
         conversationId: order.conversation_id,
