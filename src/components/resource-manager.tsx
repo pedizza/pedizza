@@ -64,6 +64,7 @@ export function ResourceManager({
               ? Store
               : Settings2;
   const [category, setCategory] = useState("");
+  const [pricingMode, setPricingMode] = useState("neighborhood");
   const [categories, setCategories] = useState<{ id: string; name: string }[]>(
     [],
   );
@@ -159,6 +160,7 @@ export function ResourceManager({
     return () => clearTimeout(t);
   }, [toast]);
   function edit(row: Row | null) {
+    setPricingMode(String(row?.pricing_mode || "neighborhood"));
     setSizes(
       ((row?.sizes || []) as ProductSize[]).map((size) => ({
         ...size,
@@ -194,6 +196,13 @@ export function ResourceManager({
   function value(field: Field) {
     const v = editing?.[field.key] ?? field.default;
     if (field.type === "checkbox") return Boolean(v);
+    if (field.unit === "km")
+      return v == null
+        ? ""
+        : (Number(v) / 1000)
+            .toFixed(2)
+            .replace(/\.00$/, "")
+            .replace(/(\.\d)0$/, "$1");
     if (field.type === "money")
       return v == null ? "" : (Number(v) / 100).toFixed(2).replace(".", ",");
     if (field.type === "datetime-local") return v ? String(v).slice(0, 16) : "";
@@ -219,9 +228,10 @@ export function ResourceManager({
                   ? null
                   : 0
               : f.type === "number" ||
+                  f.unit === "km" ||
                   ["day_of_week", "max_flavors", "paper_width"].includes(f.key)
                 ? raw
-                  ? Number(raw)
+                  ? Math.round(Number(raw) * (f.unit === "km" ? 1000 : 1))
                   : null
                 : ["date", "datetime-local"].includes(f.type || "") && !raw
                   ? null
@@ -352,6 +362,8 @@ export function ResourceManager({
     }
   }
   function label(row: Row) {
+    if (resourceKey === "faixas")
+      return `${formatKm(Number(row.min_meters))} a ${formatKm(Number(row.max_meters))}`;
     return String(
       row.name ||
         row.display_name ||
@@ -369,6 +381,12 @@ export function ResourceManager({
             ][Number(row.day_of_week)]
           : resource.singular),
     );
+  }
+  function formatKm(meters: number) {
+    return `${(meters / 1000)
+      .toFixed(2)
+      .replace(/\.00$/, "")
+      .replace(/(\.\d)0$/, "$1")} km`;
   }
   return (
     <section className="stack resource-workspace" data-resource={resourceKey}>
@@ -498,8 +516,12 @@ export function ResourceManager({
                     : "Desativado"
                   : f.type === "money"
                     ? formatCurrency(Number(data[0][f.key]) || 0)
-                    : optionLabels[String(data[0][f.key])] ||
-                      String(data[0][f.key] || "Não informado")}
+                    : f.unit === "km"
+                      ? data[0].pricing_mode === "neighborhood"
+                        ? "Usado somente na cobrança por distância"
+                        : formatKm(Number(data[0][f.key]))
+                      : optionLabels[String(data[0][f.key])] ||
+                        String(data[0][f.key] || "Não informado")}
               </p>
             </div>
           ))}
@@ -582,6 +604,14 @@ export function ResourceManager({
                     </span>
                   </>
                 )}
+                {resourceKey === "bairros" && (
+                  <p>
+                    {String(row.city)} – {String(row.state)} · Taxa:{" "}
+                    {Number(row.fee_cents) === 0
+                      ? "Grátis"
+                      : formatCurrency(Number(row.fee_cents))}
+                  </p>
+                )}
                 {resourceKey === "regras-precos" && (
                   <span className={`badge ${row.allow_split ? "green" : ""}`}>
                     {row.allow_split
@@ -591,7 +621,9 @@ export function ResourceManager({
                 )}
                 {resourceKey !== "produtos" &&
                   resourceKey !== "categorias" &&
-                  resourceKey !== "bordas" && (
+                  resourceKey !== "bordas" &&
+                  resourceKey !== "bairros" &&
+                  resourceKey !== "faixas" && (
                     <p>
                       {resource.fields
                         .filter(
@@ -615,6 +647,14 @@ export function ResourceManager({
                         .join(" · ")}
                     </p>
                   )}
+                {resourceKey === "faixas" && (
+                  <p>
+                    Taxa de entrega:{" "}
+                    {Number(row.fee_cents) === 0
+                      ? "Grátis"
+                      : formatCurrency(Number(row.fee_cents))}
+                  </p>
+                )}
               </div>
               {resourceKey === "categorias" && (
                 <div className="category-order">
@@ -810,89 +850,124 @@ export function ResourceManager({
                     f.key === "base_price_cents"
                   ),
               )
-              .map((f) => (
-                <label
-                  key={f.key}
-                  className={
-                    f.type === "textarea"
-                      ? "full"
-                      : f.type === "checkbox"
-                        ? "checkbox-label"
-                        : ""
-                  }
-                >
-                  {f.type === "checkbox" ? (
-                    <>
-                      <input
-                        type="checkbox"
-                        name={f.key}
-                        defaultChecked={Boolean(value(f))}
-                      />
-                      {f.label}
-                    </>
-                  ) : (
-                    <>
-                      {f.label}
-                      {f.required ? " *" : ""}
-                      {f.type === "textarea" ? (
-                        <textarea
-                          name={f.key}
-                          defaultValue={String(value(f))}
-                          maxLength={2000}
-                        />
-                      ) : f.reference ? (
-                        <ReferenceSelect
-                          resource={f.reference}
-                          name={f.key}
-                          initialValue={String(value(f))}
-                          required={f.required}
-                        />
-                      ) : f.type === "select" ? (
-                        <select
-                          name={f.key}
-                          defaultValue={String(value(f))}
-                          required={f.required}
-                        >
-                          <option value="">Selecione</option>
-                          {f.reference
-                            ? (options[f.key] || []).map((o) => (
-                                <option value={o.id} key={o.id}>
-                                  {String(
-                                    o.name || o.code || o.display_name || o.id,
-                                  )}
-                                </option>
-                              ))
-                            : f.options?.map((o) => (
-                                <option key={o.value} value={o.value}>
-                                  {f.key === "day_of_week"
-                                    ? [
-                                        "Domingo",
-                                        "Segunda",
-                                        "Terça",
-                                        "Quarta",
-                                        "Quinta",
-                                        "Sexta",
-                                        "Sábado",
-                                      ][Number(o.value)]
-                                    : optionLabels[o.value] || o.label}
-                                </option>
-                              ))}
-                        </select>
-                      ) : (
+              .map((f) =>
+                resourceKey === "entrega" &&
+                f.key === "max_distance_meters" &&
+                pricingMode === "neighborhood" ? (
+                  <input
+                    key={f.key}
+                    type="hidden"
+                    name={f.key}
+                    value={String(value(f))}
+                  />
+                ) : (
+                  <label
+                    key={f.key}
+                    className={
+                      f.type === "textarea"
+                        ? "full"
+                        : f.type === "checkbox"
+                          ? "checkbox-label"
+                          : ""
+                    }
+                  >
+                    {f.type === "checkbox" ? (
+                      <>
                         <input
-                          type={f.type === "money" ? "text" : f.type || "text"}
+                          type="checkbox"
                           name={f.key}
-                          defaultValue={String(value(f))}
-                          required={f.required}
-                          inputMode={f.type === "money" ? "decimal" : undefined}
-                          min={f.type === "number" ? 0 : undefined}
-                          maxLength={254}
+                          defaultChecked={Boolean(value(f))}
                         />
-                      )}
-                    </>
-                  )}
-                </label>
-              ))}
+                        {f.label}
+                      </>
+                    ) : (
+                      <>
+                        {f.label}
+                        {f.required ? " *" : ""}
+                        {f.type === "textarea" ? (
+                          <textarea
+                            name={f.key}
+                            defaultValue={String(value(f))}
+                            maxLength={2000}
+                          />
+                        ) : f.reference ? (
+                          <ReferenceSelect
+                            resource={f.reference}
+                            name={f.key}
+                            initialValue={String(value(f))}
+                            required={f.required}
+                          />
+                        ) : f.type === "select" ? (
+                          <select
+                            name={f.key}
+                            defaultValue={String(value(f))}
+                            required={f.required}
+                            onChange={
+                              resourceKey === "entrega" &&
+                              f.key === "pricing_mode"
+                                ? (event) => setPricingMode(event.target.value)
+                                : undefined
+                            }
+                          >
+                            <option value="">Selecione</option>
+                            {f.reference
+                              ? (options[f.key] || []).map((o) => (
+                                  <option value={o.id} key={o.id}>
+                                    {String(
+                                      o.name ||
+                                        o.code ||
+                                        o.display_name ||
+                                        o.id,
+                                    )}
+                                  </option>
+                                ))
+                              : f.options?.map((o) => (
+                                  <option key={o.value} value={o.value}>
+                                    {f.key === "day_of_week"
+                                      ? [
+                                          "Domingo",
+                                          "Segunda",
+                                          "Terça",
+                                          "Quarta",
+                                          "Quinta",
+                                          "Sexta",
+                                          "Sábado",
+                                        ][Number(o.value)]
+                                      : resourceKey === "entrega" &&
+                                          f.key === "pricing_mode"
+                                        ? o.label
+                                        : optionLabels[o.value] || o.label}
+                                  </option>
+                                ))}
+                          </select>
+                        ) : (
+                          <input
+                            type={
+                              f.type === "money"
+                                ? "text"
+                                : f.unit
+                                  ? "number"
+                                  : f.type || "text"
+                            }
+                            name={f.key}
+                            defaultValue={String(value(f))}
+                            required={f.required}
+                            inputMode={
+                              f.type === "money" ? "decimal" : undefined
+                            }
+                            min={f.type === "number" || f.unit ? 0 : undefined}
+                            step={f.unit === "km" ? "any" : undefined}
+                            maxLength={254}
+                          />
+                        )}
+                        {f.description && (
+                          <small className="field-help">{f.description}</small>
+                        )}
+                      </>
+                    )}
+                  </label>
+                ),
+              )}
           </div>
           {resourceKey === "produtos" && (
             <fieldset

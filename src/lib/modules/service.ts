@@ -70,7 +70,7 @@ export async function listResource(
     params.push(offset);
     const data = await rows<DataRow>(
       db,
-      `select ${cols.join(",")} from public.${r.table} where ${where} order by ${["produtos", "categorias", "bordas"].includes(key) ? "sort_order,name,id" : "created_at desc,id"} limit 20 offset $${params.length}`,
+      `select ${cols.join(",")} from public.${r.table} where ${where} order by ${["produtos", "categorias", "bordas"].includes(key) ? "sort_order,name,id" : key === "faixas" ? "min_meters asc,id" : key === "bairros" ? "normalized_name,city,state,id" : "created_at desc,id"} limit 20 offset $${params.length}`,
       params,
     );
     if (key === "produtos" && data.length) {

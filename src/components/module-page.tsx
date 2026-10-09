@@ -12,6 +12,7 @@ export async function ModulePage({
   selected,
   hideHeader = false,
   groups,
+  tabGuidance,
 }: {
   title: string;
   description: string;
@@ -19,6 +20,7 @@ export async function ModulePage({
   selected: string;
   hideHeader?: boolean;
   groups?: { label: string; keys: string[] }[];
+  tabGuidance?: Record<string, { title: string; description: string }>;
 }) {
   const available = tabs.filter((t) => resources[t.key]);
   const key = available.some((t) => t.key === selected)
@@ -76,6 +78,12 @@ export async function ModulePage({
             </Link>
           ))}
         </nav>
+      )}
+      {tabGuidance?.[key] && (
+        <aside className="module-tab-guidance">
+          <strong>{tabGuidance[key].title}</strong>
+          <p>{tabGuidance[key].description}</p>
+        </aside>
       )}
       {key === "horarios" ? (
         <BusinessHoursManager

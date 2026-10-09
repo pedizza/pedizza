@@ -21,6 +21,8 @@ export type Field = {
   default?: string | number | boolean;
   min?: number;
   max?: number;
+  unit?: "km";
+  description?: string;
 };
 export type Resource = {
   table: string;
@@ -488,27 +490,30 @@ export const resources: Record<string, Resource> = {
     table: "delivery_settings",
     title: "Regras de entrega",
     singular: "configuração",
-    description: "Escolha como sua loja calcula as taxas.",
+    description:
+      "Escolha se sua loja cobra por bairro ou pela distância da rota.",
     read: "delivery.view",
     write: "delivery.edit",
     fields: [
       {
         key: "pricing_mode",
-        label: "Cobrança por",
+        label: "Como calcular a taxa de entrega?",
         type: "select",
         required: true,
         default: "neighborhood",
         options: [
-          { value: "neighborhood", label: "neighborhood" },
-          { value: "distance", label: "distance" },
+          { value: "neighborhood", label: "Por bairro" },
+          { value: "distance", label: "Por distância percorrida (km)" },
         ],
       },
       {
         key: "max_distance_meters",
-        label: "Distância máxima (metros)",
+        label: "Limite máximo de entrega (km)",
         type: "number",
         required: true,
         default: 10000,
+        unit: "km",
+        description: "A loja não aceitará endereços além deste limite.",
       },
     ],
     singleton: true,
@@ -518,14 +523,38 @@ export const resources: Record<string, Resource> = {
     table: "delivery_neighborhood_fees",
     title: "Bairros atendidos",
     singular: "bairro",
-    description: "Uma taxa definida para cada bairro.",
+    description: "Cadastre os bairros atendidos e a taxa de cada um.",
     read: "delivery.view",
     write: "delivery.edit",
     fields: [
-      { key: "name", label: "Bairro", type: "text", required: true },
-      { key: "city", label: "Cidade", type: "text", required: true },
-      { key: "state", label: "UF", type: "text", required: true },
-      { key: "fee_cents", label: "Taxa", type: "money", required: true },
+      {
+        key: "name",
+        label: "Nome do bairro",
+        type: "text",
+        required: true,
+        description: "Use o nome que aparece no endereço do cliente.",
+      },
+      {
+        key: "city",
+        label: "Cidade",
+        type: "text",
+        required: true,
+        description: "Digite a cidade onde esse bairro fica.",
+      },
+      {
+        key: "state",
+        label: "Estado (UF)",
+        type: "text",
+        required: true,
+        description: "Informe a sigla com duas letras. Ex.: SP.",
+      },
+      {
+        key: "fee_cents",
+        label: "Taxa de entrega",
+        type: "money",
+        required: true,
+        description: "Informe 0,00 para entrega grátis.",
+      },
       {
         key: "active",
         label: "Ativo",
@@ -542,25 +571,36 @@ export const resources: Record<string, Resource> = {
     table: "delivery_distance_fees",
     title: "Faixas de distância",
     singular: "faixa",
-    description: "A distância é calculada pela rota real.",
+    description:
+      "Informe a taxa para cada intervalo de quilômetros da rota real.",
     read: "delivery.view",
     write: "delivery.edit",
     fields: [
       {
         key: "min_meters",
-        label: "De (metros)",
+        label: "A partir de (km)",
         type: "number",
         required: true,
         default: 0,
+        unit: "km",
+        description: "Exemplo: 0 para a primeira faixa.",
       },
       {
         key: "max_meters",
-        label: "Até (metros, exclusivo)",
+        label: "Até (km)",
         type: "number",
         required: true,
         default: 2000,
+        unit: "km",
+        description: "A faixa seguinte pode começar neste mesmo limite.",
       },
-      { key: "fee_cents", label: "Taxa", type: "money", required: true },
+      {
+        key: "fee_cents",
+        label: "Taxa de entrega",
+        type: "money",
+        required: true,
+        description: "Informe 0,00 para oferecer entrega grátis nesta faixa.",
+      },
       {
         key: "active",
         label: "Ativa",
