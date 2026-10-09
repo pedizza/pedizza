@@ -3957,6 +3957,165 @@ textarea::placeholder {
   color: #8f1712;
   border-color: #e8aaa4;
 }
+.orders-workspace .kanban {
+  grid-template-columns: none;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(280px, calc((100% - 48px) / 4));
+  gap: 14px;
+  padding: 2px 2px 14px;
+}
+.orders-workspace .kanban-column {
+  min-width: 0;
+  min-height: 390px;
+  max-height: calc(100dvh - 300px);
+  padding: 12px;
+  border: 1px solid #e7ecf4;
+  border-radius: 16px;
+  background: #f7f8fb;
+  scrollbar-color: #cbd2de transparent;
+}
+.orders-workspace .kanban-column > h2 {
+  top: -12px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+  min-height: 64px;
+  padding: 10px 4px 14px;
+  margin: -12px 0 12px;
+  border: 0;
+  border-radius: 0;
+  background: inherit;
+  color: #24324b;
+}
+.orders-workspace .kanban-column > h2::before {
+  display: none;
+}
+.orders-workspace .kanban-heading-icon {
+  display: grid;
+  flex: 0 0 42px;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border-radius: 13px;
+  background: #e9eefc;
+  color: #315fe8;
+}
+.orders-workspace .kanban-heading-copy {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+.orders-workspace .kanban-heading-copy strong {
+  font-size: 14px;
+  line-height: 1.2;
+}
+.orders-workspace .kanban-heading-copy small {
+  color: #748098;
+  font-size: 10px;
+  font-weight: 450;
+  line-height: 1.3;
+}
+.orders-workspace .kanban-column > h2 .badge {
+  display: grid;
+  flex: 0 0 30px;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  margin-left: auto;
+  border-radius: 50%;
+  background: #e9eefc;
+  color: #315fe8;
+  font-size: 12px;
+  font-weight: 750;
+}
+.orders-workspace .kanban-column.stage-0,
+.orders-workspace .kanban-column.stage-0 > h2 {
+  background: #fff5f5;
+}
+.orders-workspace .kanban-column.stage-0 {
+  border-color: #f4dddd;
+}
+.orders-workspace .kanban-column.stage-0 .kanban-heading-icon,
+.orders-workspace .kanban-column.stage-0 > h2 .badge {
+  background: #ffe5e7;
+  color: #df1d2d;
+}
+.orders-workspace .kanban-column.stage-1,
+.orders-workspace .kanban-column.stage-1 > h2 {
+  background: #fffaf0;
+}
+.orders-workspace .kanban-column.stage-1 {
+  border-color: #f2e7cc;
+}
+.orders-workspace .kanban-column.stage-1 .kanban-heading-icon,
+.orders-workspace .kanban-column.stage-1 > h2 .badge {
+  background: #fff0cd;
+  color: #ad7100;
+}
+.orders-workspace .kanban-column.stage-2,
+.orders-workspace .kanban-column.stage-2 > h2 {
+  background: #fff8f0;
+}
+.orders-workspace .kanban-column.stage-2 {
+  border-color: #f1e1ce;
+}
+.orders-workspace .kanban-column.stage-2 .kanban-heading-icon,
+.orders-workspace .kanban-column.stage-2 > h2 .badge {
+  background: #ffead5;
+  color: #bd6812;
+}
+.orders-workspace .kanban-column.stage-3,
+.orders-workspace .kanban-column.stage-3 > h2,
+.orders-workspace .kanban-column.stage-5,
+.orders-workspace .kanban-column.stage-5 > h2,
+.orders-workspace .kanban-column.stage-6,
+.orders-workspace .kanban-column.stage-6 > h2 {
+  background: #f1faf6;
+}
+.orders-workspace .kanban-column.stage-3,
+.orders-workspace .kanban-column.stage-5,
+.orders-workspace .kanban-column.stage-6 {
+  border-color: #dceee5;
+}
+.orders-workspace .kanban-column.stage-3 .kanban-heading-icon,
+.orders-workspace .kanban-column.stage-3 > h2 .badge,
+.orders-workspace .kanban-column.stage-5 .kanban-heading-icon,
+.orders-workspace .kanban-column.stage-5 > h2 .badge,
+.orders-workspace .kanban-column.stage-6 .kanban-heading-icon,
+.orders-workspace .kanban-column.stage-6 > h2 .badge {
+  background: #dcf5e8;
+  color: #16834c;
+}
+.orders-workspace .kanban-column.stage-4,
+.orders-workspace .kanban-column.stage-4 > h2 {
+  background: #f2f6ff;
+}
+.orders-workspace .kanban-column.stage-4 {
+  border-color: #dce5fb;
+}
+.orders-workspace .kanban-column.stage-4 .kanban-heading-icon,
+.orders-workspace .kanban-column.stage-4 > h2 .badge {
+  background: #e1eaff;
+  color: #315fe8;
+}
+.orders-workspace .kanban-column.stage-7,
+.orders-workspace .kanban-column.stage-7 > h2,
+.orders-workspace .kanban-column.stage-8,
+.orders-workspace .kanban-column.stage-8 > h2 {
+  background: #f5f6f8;
+}
+.orders-workspace .kanban-column.stage-7,
+.orders-workspace .kanban-column.stage-8 {
+  border-color: #e4e7eb;
+}
+.orders-workspace .kanban-column.stage-7 .kanban-heading-icon,
+.orders-workspace .kanban-column.stage-7 > h2 .badge,
+.orders-workspace .kanban-column.stage-8 .kanban-heading-icon,
+.orders-workspace .kanban-column.stage-8 > h2 .badge {
+  background: #e9edf2;
+  color: #596579;
+}
 .order-card-actions {
   display: flex;
   flex-wrap: wrap;

@@ -11,6 +11,10 @@ import {
   CircleCheck,
   Bike,
   Store,
+  PackageCheck,
+  CheckCheck,
+  Ban,
+  CircleX,
 } from "lucide-react";
 import type { Order } from "@/lib/services/orders";
 import type { Permission } from "@/lib/permissions";
@@ -213,23 +217,65 @@ export function OrdersBoard({
     }
   }
   const groups = [
-    { label: "Novos", Icon: Inbox, statuses: ["new"] },
-    { label: "Em preparo", Icon: ChefHat, statuses: ["accepted", "preparing"] },
     {
-      label: "Prontos",
-      Icon: CircleCheck,
-      statuses: ["ready", "ready_for_pickup"],
+      label: "Novos",
+      description: "Pedidos recebidos agora",
+      Icon: Inbox,
+      statuses: ["new"],
     },
     {
-      label: "Entregas e finalizados",
+      label: "Aceitos",
+      description: "Aguardando início do preparo",
+      Icon: CircleCheck,
+      statuses: ["accepted"],
+    },
+    {
+      label: "Em preparo",
+      description: "Pedidos sendo preparados",
+      Icon: ChefHat,
+      statuses: ["preparing"],
+    },
+    {
+      label: "Prontos",
+      description: "Aguardando envio ao cliente",
+      Icon: PackageCheck,
+      statuses: ["ready"],
+    },
+    {
+      label: "Prontos para retirada",
+      description: "Aguardando retirada no balcão",
+      Icon: Store,
+      statuses: ["ready_for_pickup"],
+    },
+    {
+      label: "Em entrega",
+      description: "A caminho do cliente",
       Icon: Bike,
-      statuses: [
-        "out_for_delivery",
-        "delivered",
-        "picked_up",
-        "cancelled",
-        "refused",
-      ],
+      statuses: ["out_for_delivery"],
+    },
+    {
+      label: "Entregues",
+      description: "Concluídos no endereço",
+      Icon: CheckCheck,
+      statuses: ["delivered"],
+    },
+    {
+      label: "Retirados",
+      description: "Concluídos no balcão",
+      Icon: Store,
+      statuses: ["picked_up"],
+    },
+    {
+      label: "Cancelados",
+      description: "Pedidos cancelados pela loja",
+      Icon: Ban,
+      statuses: ["cancelled"],
+    },
+    {
+      label: "Recusados",
+      description: "Pedidos não aceitos",
+      Icon: CircleX,
+      statuses: ["refused"],
     },
   ];
   return (
@@ -287,8 +333,13 @@ export function OrdersBoard({
               key={g.label}
             >
               <h2>
-                <g.Icon size={17} aria-hidden="true" />
-                {g.label}
+                <span className="kanban-heading-icon">
+                  <g.Icon size={18} aria-hidden="true" />
+                </span>
+                <span className="kanban-heading-copy">
+                  <strong>{g.label}</strong>
+                  <small>{g.description}</small>
+                </span>
                 <span className="badge">
                   {
                     orders.filter((o) => g.statuses.includes(o.order_status))
