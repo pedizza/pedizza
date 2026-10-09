@@ -70,7 +70,6 @@ export function OrdersBoard({
     [total, setTotal] = useState(initialTotal),
     [search, setSearch] = useState(initialQuery),
     [query, setQuery] = useState(initialQuery),
-    [realtimeConnected, setRealtimeConnected] = useState(false),
     [error, setError] = useState(""),
     [detail, setDetail] = useState<Detail | null>(null),
     [action, setAction] = useState<{ order: Order; status: string } | null>(
@@ -120,10 +119,6 @@ export function OrdersBoard({
   }, [load]);
   useRealtime(tenantId, "orders", () => void load(), undefined, 15000);
   useEffect(() => {
-    const onState = (event: Event) =>
-      setRealtimeConnected(
-        !!(event as CustomEvent<{ connected: boolean }>).detail?.connected,
-      );
     const onOrder = (event: Event) => {
       const detail = (
         event as CustomEvent<{
@@ -156,10 +151,8 @@ export function OrdersBoard({
       });
       setError("");
     };
-    window.addEventListener("pedizza:realtime-state", onState);
     window.addEventListener("pedizza:order-change", onOrder);
     return () => {
-      window.removeEventListener("pedizza:realtime-state", onState);
       window.removeEventListener("pedizza:order-change", onOrder);
     };
   }, [filter, load, page, query]);
@@ -292,6 +285,9 @@ export function OrdersBoard({
               setPage(1);
             }}
           />
+          <span className="orders-search-shortcut" aria-hidden="true">
+            ⌘ K
+          </span>
         </div>
         <select
           aria-label="Filtrar status"
@@ -309,9 +305,6 @@ export function OrdersBoard({
             </option>
           ))}
         </select>
-        <span className={`badge ${realtimeConnected ? "green" : "amber"}`}>
-          {realtimeConnected ? "Tempo real conectado" : "Reconectando…"}
-        </span>
       </div>
       {error && (
         <p className="feedback" role="alert">

@@ -1102,3 +1102,97 @@ textarea:focus {
     transition: none;
   }
 }
+.shell .orders-page-header {
+  align-items: center;
+  margin-bottom: 30px;
+}
+.shell .orders-page-title h1 {
+  margin: 0 0 5px;
+  font-size: clamp(25px, 2.5vw, 38px);
+  letter-spacing: -1.3px;
+  line-height: 1.1;
+}
+.shell .orders-page-title p {
+  margin: 0;
+  font-size: 15px;
+}
+.shell .orders-workspace .orders-toolbar .search {
+  max-width: 870px;
+  min-height: 60px;
+}
+.shell .orders-workspace .orders-toolbar .search input {
+  min-height: 56px;
+  border: 0;
+  background: transparent;
+}
+.shell .orders-workspace .orders-toolbar select {
+  min-height: 60px;
+}
+.shell .orders-workspace .kanban-column {
+  min-height: 480px;
+  max-height: calc(100dvh - 340px);
+  border: 1px solid #e7ecf4;
+  border-radius: 16px;
+  padding: 12px;
+}
+.shell .orders-workspace .kanban-column > h2 {
+  top: -12px;
+  justify-content: flex-start;
+  gap: 10px;
+  min-height: 64px;
+  padding: 10px 4px 14px;
+  margin: -12px 0 12px;
+  border: 0;
+  border-radius: 0;
+  background: inherit;
+  color: #24324b;
+}
+.shell .orders-workspace .kanban-column > h2 .badge {
+  display: grid;
+  flex: 0 0 30px;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  margin-left: auto;
+  border-radius: 50%;
+  font-size: 12px;
+}
+.shell .orders-workspace .kanban-column.stage-0,
+.shell .orders-workspace .kanban-column.stage-0 > h2 {
+  background: #fff5f5;
+}
+.shell .orders-workspace .kanban-column.stage-1,
+.shell .orders-workspace .kanban-column.stage-1 > h2 {
+  background: #fffaf0;
+}
+.shell .orders-workspace .kanban-column.stage-2,
+.shell .orders-workspace .kanban-column.stage-2 > h2 {
+  background: #fff8f0;
+}
+.shell .orders-workspace .kanban-column.stage-3,
+.shell .orders-workspace .kanban-column.stage-3 > h2,
+.shell .orders-workspace .kanban-column.stage-5,
+.shell .orders-workspace .kanban-column.stage-5 > h2,
+.shell .orders-workspace .kanban-column.stage-6,
+.shell .orders-workspace .kanban-column.stage-6 > h2 {
+  background: #f1faf6;
+}
+.shell .orders-workspace .kanban-column.stage-4,
+.shell .orders-workspace .kanban-column.stage-4 > h2 {
+  background: #f2f6ff;
+}
+.shell .orders-workspace .kanban-column.stage-7,
+.shell .orders-workspace .kanban-column.stage-7 > h2,
+.shell .orders-workspace .kanban-column.stage-8,
+.shell .orders-workspace .kanban-column.stage-8 > h2 {
+  background: #f5f6f8;
+}
+@media (max-width: 900px) {
+  .shell .orders-page-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .shell .orders-workspace .kanban-column {
+    max-height: calc(100dvh - 400px);
+  }
+}

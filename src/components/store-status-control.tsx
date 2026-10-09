@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { CirclePause, LockKeyhole, Store } from "lucide-react";
+import { ChevronDown, CirclePause, LockKeyhole, Store } from "lucide-react";
 
 const states = {
   automatic: { label: "Conforme horário", className: "automatic" },
@@ -56,6 +56,7 @@ export function StoreStatusControl({
       <div className={`store-status-current ${states[mode].className}`}>
         <span />
         {states[mode].label}
+        <ChevronDown size={15} aria-hidden="true" />
       </div>
       {canManage && (
         <div className="store-status-actions" aria-label="Status da loja">

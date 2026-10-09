@@ -1,9 +1,9 @@
 import { transaction, one } from "@/lib/db";
 import { requirePage } from "@/lib/auth/context";
 import { OrdersBoard } from "@/components/orders-board";
-import { PageHeader } from "@/components/ui/states";
 import { StoreStatusControl } from "@/components/store-status-control";
 import { listOrders } from "@/lib/services/orders";
+import { ClipboardList } from "lucide-react";
 export default async function Page({
   searchParams,
 }: {
@@ -29,16 +29,21 @@ export default async function Page({
   }, ctx.userId);
   return (
     <>
-      <PageHeader
-        title="Gestor de pedidos"
-        description="Cada pedido no seu tempo. Toda a operação à vista."
-        action={
-          <StoreStatusControl
-            initialMode={initial.observed?.status_mode || "automatic"}
-            canManage={ctx.permissions.includes("settings.edit")}
-          />
-        }
-      />
+      <div className="page-header orders-page-header">
+        <div className="orders-page-title">
+          <span className="orders-page-icon">
+            <ClipboardList size={25} aria-hidden="true" />
+          </span>
+          <div>
+            <h1>Gestor de pedidos</h1>
+            <p>Cada pedido no seu tempo. Toda a operação à vista.</p>
+          </div>
+        </div>
+        <StoreStatusControl
+          initialMode={initial.observed?.status_mode || "automatic"}
+          canManage={ctx.permissions.includes("settings.edit")}
+        />
+      </div>
       <OrdersBoard
         tenantId={ctx.tenantId}
         permissions={ctx.permissions}
