@@ -47,12 +47,12 @@ export default async function Page({
     }>(
       db,
       `with period as (
-         select (date_trunc('day',now() at time zone timezone) - ($2::int-1)*interval '1 day') at time zone timezone start_at
+         select (date_trunc('day',now() at time zone timezone) - make_interval(days => ($2::int - 1))) at time zone timezone start_at
          from public.store_settings where tenant_id=$1
        ), bounds as (
          select start_at,
-                case when $2::int=1 then now()-interval '1 day' else start_at end previous_end,
-                (case when $2::int=1 then now()-interval '1 day' else start_at end) - ($2::int * interval '1 day') previous_start
+                case when $2::int=1 then now()-make_interval(days => 1) else start_at end previous_end,
+                (case when $2::int=1 then now()-make_interval(days => 1) else start_at end) - make_interval(days => $2::int) previous_start
          from period
        ), summary as (
          select
@@ -93,7 +93,7 @@ export default async function Page({
       ? days === 1
         ? await rows<{ day: string; total: number }>(
             db,
-            `select lpad(extract(hour from o.created_at at time zone s.timezone)::int::text,2,'0')||'h' day,
+            `select lpad(extract(hour from o.created_at at time zone s.timezone)::int::text,2,'0')||'h' as "day",
                     count(*)::int total
              from public.orders o join public.store_settings s on s.tenant_id=o.tenant_id
              where o.tenant_id=$1 and o.order_status in ('delivered','picked_up')
@@ -106,14 +106,14 @@ export default async function Page({
             db,
             `select to_char(o.created_at at time zone s.timezone,'DD/MM') as "day",count(*)::int total
              from public.orders o join public.store_settings s on s.tenant_id=o.tenant_id
-             where o.tenant_id=$1 and o.order_status in ('delivered','picked_up') and o.created_at>=now()-$2*interval '1 day'
+             where o.tenant_id=$1 and o.order_status in ('delivered','picked_up') and o.created_at>=now()-make_interval(days => $2::int)
              group by 1 order by min(o.created_at)`,
             [ctx.tenantId, days],
           )
       : [];
     const top = await rows<{ name: string; quantity: number }>(
       db,
-      `select i.name_snapshot name,sum(i.quantity)::int quantity from public.order_items i join public.orders o on o.id=i.order_id and o.tenant_id=i.tenant_id where i.tenant_id=$1 and o.order_status in ('delivered','picked_up') and o.created_at>=now()-$2*interval '1 day' group by i.name_snapshot order by quantity desc limit 3`,
+      `select i.name_snapshot name,sum(i.quantity)::int quantity from public.order_items i join public.orders o on o.id=i.order_id and o.tenant_id=i.tenant_id where i.tenant_id=$1 and o.order_status in ('delivered','picked_up') and o.created_at>=now()-make_interval(days => $2::int) group by i.name_snapshot order by quantity desc limit 3`,
       [ctx.tenantId, days],
     );
     const whatsapp = ctx.permissions.includes("whatsapp.view")

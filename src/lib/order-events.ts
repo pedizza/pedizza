@@ -29,6 +29,9 @@ function scheduleReconnect() {
 }
 
 async function connect() {
+  // The SSE endpoint also polls the database, so realtime updates keep working
+  // when production has no direct Postgres URL configured for LISTEN/NOTIFY.
+  if (!process.env.DIRECT_URL) return;
   if (client || connecting) return connecting;
   connecting = (async () => {
     const next = new pg.Client({
