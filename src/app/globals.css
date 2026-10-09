@@ -4664,6 +4664,9 @@ textarea:focus {
   line-height: 1.2;
   font-variant-numeric: tabular-nums;
 }
+.overview-workspace .stat-sales .stat-value {
+  color: #fff;
+}
 .overview-workspace .stat-content small {
   color: #7181a5;
   font-size: 11px;
