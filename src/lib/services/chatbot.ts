@@ -286,10 +286,22 @@ async function cartSummary(db: DB, tenant: string, cart: string) {
     "select address_snapshot is not null has_delivery_address from public.carts where tenant_id=$1 and id=$2",
     [tenant, cart],
   );
-  const items = q.items.map(
-    (item, index) =>
-      `${keycapNumber(index + 1)} ${item.quantity}x ${item.size_name_snapshot || ""} ${item.name_snapshot}${item.border_name_snapshot ? " · " + item.border_name_snapshot : ""} — ${formatChatCurrency(item.unit_price_cents * item.quantity)}${item.observation ? "\nObservação do Pedido: " + item.observation : ""}`,
-  );
+  const items = q.items.map((item, index) => {
+    const pizzaPrice = Math.max(
+      0,
+      item.unit_price_cents - item.border_price_cents,
+    );
+    const lines = [
+      `${keycapNumber(index + 1)} ${item.quantity}x ${item.size_name_snapshot || ""} ${item.name_snapshot} — ${formatChatCurrency(pizzaPrice * item.quantity)}`,
+    ];
+    if (item.border_name_snapshot)
+      lines.push(
+        `Borda ${item.border_name_snapshot} — ${formatChatCurrency(item.border_price_cents * item.quantity)}`,
+      );
+    if (item.observation)
+      lines.push(`Observação do Pedido: ${item.observation}`);
+    return lines.join("\n");
+  });
   const totals = [
     `Subtotal: ${formatChatCurrency(q.subtotal_cents)}`,
     q.discount_cents > 0
@@ -301,10 +313,7 @@ async function cartSummary(db: DB, tenant: string, cart: string) {
   totals.push(`Total: ${formatChatCurrency(q.total_cents)}`);
   return {
     quote: q,
-    text: joinBlocks(
-      items.join("\n\n"),
-      totals.join("\n"),
-    ),
+    text: joinBlocks(items.join("\n\n"), totals.join("\n")),
   };
 }
 export async function processBotMessage(
@@ -860,8 +869,7 @@ export async function processBotMessage(
     async function currentStepMessage() {
       if (step === "main_menu")
         return joinBlocks("Como podemos ajudar?", prompts.main_menu);
-      if (step === "awaiting_product")
-        return productSelectionCatalog();
+      if (step === "awaiting_product") return productSelectionCatalog();
       if (step === "awaiting_border" && isBeverageCategory())
         return joinBlocks(
           namedMessage(customer?.name, "Anotei o seu pedido! 📝"),
@@ -880,8 +888,7 @@ export async function processBotMessage(
         const summary = await cartSummary(db, tenant, context.cartId);
         return cartMenuMessage(summary.text, customer?.name);
       }
-      if (step === "resume_cart" && context.cartId)
-        return resumeCartMessage();
+      if (step === "resume_cart" && context.cartId) return resumeCartMessage();
       if (step === "awaiting_final_confirmation" && context.cartId) {
         const summary = await cartSummary(db, tenant, context.cartId);
         return buildFinalConfirmation(summary.text, summary.quote.total_cents);
@@ -2401,7 +2408,7 @@ export async function processBotMessage(
               "adicionar mais itens",
               "adicionar item",
               "mais itens",
-          )
+            )
           ) {
             context.quoteHash = undefined;
             await beginAddingMoreItems();

@@ -84,19 +84,32 @@ export async function orderSummary(db: DB, order: Order) {
     border_name_snapshot: string | null;
     quantity: number;
     unit_price_cents: number;
+    border_price_cents: number;
     observation: string;
   }>(
     db,
-    "select name_snapshot,size_name_snapshot,border_name_snapshot,quantity,unit_price_cents,observation from public.order_items where tenant_id=$1 and order_id=$2 order by created_at",
+    "select name_snapshot,size_name_snapshot,border_name_snapshot,quantity,unit_price_cents,border_price_cents,observation from public.order_items where tenant_id=$1 and order_id=$2 order by created_at",
     [order.tenant_id, order.id],
   );
   return [
     `Pedido #${order.order_number} — ${orderLabels[order.order_status]}`,
     `Cliente: ${order.customer_name_snapshot}`,
-    ...items.map(
-      (i) =>
-        `${i.quantity}x ${i.size_name_snapshot || ""} ${i.name_snapshot}${i.border_name_snapshot ? " · " + i.border_name_snapshot : ""} — ${formatChatCurrency(i.quantity * i.unit_price_cents)}${i.observation ? "\nObservação do Pedido: " + i.observation : ""}`,
-    ),
+    ...items.map((item) => {
+      const pizzaPrice = Math.max(
+        0,
+        item.unit_price_cents - item.border_price_cents,
+      );
+      const lines = [
+        `${item.quantity}x ${item.size_name_snapshot || ""} ${item.name_snapshot} — ${formatChatCurrency(pizzaPrice * item.quantity)}`,
+      ];
+      if (item.border_name_snapshot)
+        lines.push(
+          `Borda ${item.border_name_snapshot} — ${formatChatCurrency(item.border_price_cents * item.quantity)}`,
+        );
+      if (item.observation)
+        lines.push(`Observação do Pedido: ${item.observation}`);
+      return lines.join("\n");
+    }),
     `Subtotal: ${formatChatCurrency(order.subtotal_cents)}`,
     order.discount_cents > 0
       ? `Desconto${order.coupon_code_snapshot ? " (" + order.coupon_code_snapshot + ")" : ""}: ${formatChatCurrency(order.discount_cents)}`
