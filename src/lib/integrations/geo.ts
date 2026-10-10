@@ -155,45 +155,61 @@ export async function lookupAddress(
 }
 const coordinates = z.object({ lat: z.number(), lon: z.number() });
 export async function geocode(tenant: string, address: Address) {
-  const query = [
-    address.street,
-    address.number,
-    address.neighborhood,
-    address.city,
-    address.state,
-    address.postal_code,
-    "Brasil",
-  ].join(", ");
+  const queries = [
+    [
+      address.street,
+      address.number,
+      address.neighborhood,
+      address.city,
+      address.state,
+      address.postal_code,
+      "Brasil",
+    ],
+    [
+      address.street,
+      address.neighborhood,
+      address.city,
+      address.state,
+      address.postal_code,
+      "Brasil",
+    ],
+  ].map((parts) => parts.filter(Boolean).join(", "));
   return cached(
     tenant,
-    "geo:" + normalizeText(query),
+    "geo:" + normalizeText(queries[0]),
     coordinates,
     async () => {
-      const url = new URL("https://api.geoapify.com/v1/geocode/search");
-      url.search = new URLSearchParams({
-        text: query,
-        filter: "countrycode:br",
-        format: "json",
-        limit: "1",
-        apiKey: requiredEnv("GEOAPIFY_API_KEY"),
-      }).toString();
-      const result = z
-        .object({
-          results: z.array(
-            z.object({
-              lat: z.number(),
-              lon: z.number(),
-              rank: z.object({ confidence: z.number().optional() }).optional(),
-            }),
-          ),
-        })
-        .parse(await externalJson(url));
-      const point = result.results[0];
-      invariant(
-        point && (point.rank?.confidence ?? 0) >= 0.6,
+      for (const query of queries) {
+        const url = new URL("https://api.geoapify.com/v1/geocode/search");
+        url.search = new URLSearchParams({
+          text: query,
+          filter: "countrycode:br",
+          format: "json",
+          limit: "1",
+          apiKey: requiredEnv("GEOAPIFY_API_KEY"),
+        }).toString();
+        const result = z
+          .object({
+            results: z.array(
+              z.object({
+                lat: z.number(),
+                lon: z.number(),
+                rank: z
+                  .object({ confidence: z.number().optional() })
+                  .optional(),
+              }),
+            ),
+          })
+          .parse(await externalJson(url));
+        const point = result.results[0];
+        if (point && (point.rank?.confidence ?? 0) >= 0.6)
+          return { lat: point.lat, lon: point.lon };
+      }
+      throw new AppError(
+        400,
         "Não conseguimos localizar o endereço com precisão. Confira rua e número.",
+        "address_not_found",
       );
-      return { lat: point.lat, lon: point.lon };
     },
   );
 }

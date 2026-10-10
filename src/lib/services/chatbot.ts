@@ -1494,6 +1494,14 @@ export async function processBotMessage(
           step = "main_menu";
           reply = deliveryOutOfRangeMessage + "\n\n" + menu.text;
         }
+      } else if (
+        step === "awaiting_number" &&
+        externalErrorCode === "address_not_found"
+      ) {
+        reply = joinBlocks(
+          "Não consegui calcular a distância com esse número. Confira se a rua e o número estão corretos; não precisa enviar o CEP novamente. 📍",
+          prompts.awaiting_number,
+        );
       } else reply = joinBlocks(externalError, prompts[step]);
     } else if (interpretation?.intent === "order_status") {
       reply = joinBlocks(
