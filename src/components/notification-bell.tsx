@@ -11,24 +11,45 @@ export function NotificationBell({ tenantId }: { tenantId: string }) {
   const audio = useRef<HTMLAudioElement | null>(null),
     loading = useRef(false),
     preferences = useRef({ sound: false, orders: true }),
-    pendingOrders = useRef(new Set<string>());
+    pendingOrders = useRef(new Set<string>()),
+    alarmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
-    const player = new Audio("/sounds/toque-pedido-novo.mp3");
+    const player = new Audio("/sounds/pedido-novo.mp3");
     player.preload = "auto";
-    player.loop = true;
+    player.loop = false;
     audio.current = player;
     player.load();
-    function unlock() {
-      const shouldRing =
+    function shouldRing() {
+      return (
         pendingOrders.current.size > 0 &&
         preferences.current.sound &&
-        preferences.current.orders;
-      player.muted = !shouldRing;
+        preferences.current.orders
+      );
+    }
+    function clearAlarmTimer() {
+      if (alarmTimer.current) clearTimeout(alarmTimer.current);
+      alarmTimer.current = null;
+    }
+    function playAfterPause() {
+      if (!shouldRing()) return;
+      clearAlarmTimer();
+      alarmTimer.current = setTimeout(() => {
+        alarmTimer.current = null;
+        if (!shouldRing()) return;
+        player.currentTime = 0;
+        void player.play().catch(() => {});
+      }, 2000);
+    }
+    player.addEventListener("ended", playAfterPause);
+    function unlock() {
+      const ring = shouldRing();
+      if (ring) clearAlarmTimer();
+      player.muted = !ring;
       void player
         .play()
         .then(() => {
           player.muted = false;
-          if (!shouldRing) {
+          if (!ring) {
             player.pause();
             player.currentTime = 0;
           }
@@ -44,6 +65,8 @@ export function NotificationBell({ tenantId }: { tenantId: string }) {
     return () => {
       window.removeEventListener("pointerdown", unlock);
       window.removeEventListener("keydown", unlock);
+      player.removeEventListener("ended", playAfterPause);
+      clearAlarmTimer();
       player.pause();
       audio.current = null;
     };
@@ -56,9 +79,14 @@ export function NotificationBell({ tenantId }: { tenantId: string }) {
       preferences.current.sound &&
       preferences.current.orders;
     if (shouldRing) {
-      player.loop = true;
-      if (player.paused) void player.play().catch(() => {});
+      player.loop = false;
+      if (player.paused && !alarmTimer.current) {
+        player.currentTime = 0;
+        void player.play().catch(() => {});
+      }
     } else {
+      if (alarmTimer.current) clearTimeout(alarmTimer.current);
+      alarmTimer.current = null;
       player.pause();
       player.currentTime = 0;
     }
