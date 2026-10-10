@@ -18,6 +18,7 @@ import {
   Pause,
   Play,
   Trash2,
+  Eye,
 } from "lucide-react";
 import { resources, optionLabels, type Field } from "@/lib/modules/registry";
 import { formatCurrency, parseCurrency } from "@/lib/domain/money";
@@ -717,6 +718,16 @@ export function ResourceManager({
                 </table>
               )}
               <div className="actions">
+                {resourceKey === "clientes" && (
+                  <Link
+                    className="icon-button"
+                    href={`/app/clientes/${row.id}`}
+                    aria-label={`Ver ficha de ${label(row)}`}
+                    title="Ver ficha do cliente"
+                  >
+                    <Eye size={16} />
+                  </Link>
+                )}
                 {"active" in row && (
                   <span
                     className={`badge ${row.active && row.available !== false ? "green" : resourceKey === "produtos" && row.active ? "amber" : ""}`}

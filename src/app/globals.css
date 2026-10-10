@@ -2457,6 +2457,188 @@ small {
   }
 }
 
+.customer-profile-section,
+.customer-order-section {
+  margin-top: 22px;
+}
+.customer-profile-section {
+  padding: 22px;
+}
+.customer-profile-heading,
+.customer-order-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+.customer-profile-heading h2,
+.customer-order-section h2 {
+  margin: 0;
+}
+.customer-profile-heading > span {
+  color: var(--muted);
+  font-size: 13px;
+}
+.customer-address-list,
+.customer-order-list {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+}
+.customer-address {
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface, #fff);
+}
+.customer-address strong,
+.customer-order-header h3 {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 0;
+}
+.customer-address p,
+.customer-address small {
+  display: block;
+  margin: 6px 0 0;
+  color: var(--muted);
+}
+.customer-profile-section h3 {
+  margin: 20px 0 6px;
+}
+.customer-profile-section > p:last-child {
+  margin-bottom: 0;
+}
+.customer-order-section > .customer-profile-heading {
+  margin-bottom: 14px;
+}
+.customer-order-section > .customer-profile-heading p {
+  margin: 5px 0 0;
+}
+.customer-order-card {
+  padding: 20px;
+}
+.customer-order-header {
+  align-items: flex-start;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--line);
+}
+.customer-order-header time {
+  display: block;
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.customer-order-statuses {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+.customer-order-items {
+  display: grid;
+  gap: 12px;
+  padding: 15px 0;
+}
+.customer-order-item {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 15px;
+}
+.customer-order-item > div {
+  min-width: 0;
+}
+.customer-order-item p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+.customer-order-item > span {
+  white-space: nowrap;
+}
+.customer-order-totals {
+  display: grid;
+  gap: 7px;
+  margin: 0;
+  padding: 14px 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+.customer-order-totals > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+.customer-order-totals dt {
+  color: var(--muted);
+}
+.customer-order-totals dd {
+  margin: 0;
+}
+.customer-order-totals .customer-order-total {
+  padding-top: 7px;
+  font-weight: 700;
+}
+.customer-order-totals .customer-order-total dt {
+  color: inherit;
+}
+.customer-order-meta {
+  display: grid;
+  gap: 6px;
+  padding-top: 14px;
+}
+.customer-order-meta p {
+  margin: 0;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.customer-order-meta strong {
+  color: var(--text, #17212b);
+}
+.customer-order-history {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+.customer-order-history > strong {
+  margin-bottom: 2px;
+}
+.customer-order-history p {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+.customer-order-history time {
+  white-space: nowrap;
+  font-size: 12px;
+}
+.customer-order-empty {
+  padding: 22px;
+  color: var(--muted);
+}
+.customer-order-pagination {
+  margin-top: 16px;
+}
+@media (max-width: 640px) {
+  .customer-profile-section,
+  .customer-order-card {
+    padding: 16px;
+  }
+  .customer-order-header {
+    flex-direction: column;
+  }
+  .customer-order-statuses {
+    justify-content: flex-start;
+  }
+}
+
 /* Pedizza workspace: warm neutrals, restrained brand accents and clear hierarchy. */
 :root {
   --red: #d42d24;

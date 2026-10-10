@@ -1,19 +1,16 @@
-import { ModulePage } from "@/components/module-page";
-export default async function Page({
-  searchParams,
-}: {
-  searchParams: Promise<{ tab?: string }>;
-}) {
-  const p = await searchParams;
+import { ResourceManager } from "@/components/resource-manager";
+import { archivePermission } from "@/lib/modules/service";
+import { requirePage } from "@/lib/auth/context";
+
+export default async function Page() {
+  const ctx = await requirePage("customers.view");
   return (
-    <ModulePage
-      title="Clientes"
-      description="Uma relação que vai além do pedido."
-      tabs={[
-        { key: "clientes", label: "Todos os clientes" },
-        { key: "enderecos", label: "Endereços" },
-      ]}
-      selected={p.tab || "clientes"}
-    />
+    <div className="module-workspace">
+      <ResourceManager
+        resourceKey="clientes"
+        canEdit={ctx.permissions.includes("customers.edit")}
+        canArchive={ctx.permissions.includes(archivePermission("clientes"))}
+      />
+    </div>
   );
 }
