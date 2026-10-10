@@ -141,6 +141,7 @@ export function Conversations({
     [error, setError] = useState(""),
     [listError, setListError] = useState(""),
     [detailError, setDetailError] = useState(""),
+    [detailLoading, setDetailLoading] = useState(false),
     [listLoaded, setListLoaded] = useState(false),
     [menuOpen, setMenuOpen] = useState(false),
     [confirmAction, setConfirmAction] = useState<
@@ -152,6 +153,8 @@ export function Conversations({
   const lastSelected = useRef("");
   const reading = useRef(false);
   const detailRequest = useRef(0);
+  const detailController = useRef<AbortController | null>(null);
+  const detailRequestKey = useRef("");
   const loadList = useCallback(
     () =>
       fetch(
@@ -176,8 +179,19 @@ export function Conversations({
   );
   const loadDetail = useCallback(() => {
     if (!selected) return Promise.resolve();
+    const requestKey = `${selected}:${historyPage}`;
+    // O polling de novas mensagens não deve cancelar o carregamento inicial
+    // quando a API leva mais de um intervalo para responder.
+    if (detailRequestKey.current === requestKey) return Promise.resolve();
+    detailController.current?.abort();
     const requestId = ++detailRequest.current;
-    return fetch(`/api/conversations?id=${selected}&page=${historyPage}`)
+    const controller = new AbortController();
+    detailController.current = controller;
+    detailRequestKey.current = requestKey;
+    setDetailLoading(true);
+    return fetch(`/api/conversations?id=${selected}&page=${historyPage}`, {
+      signal: controller.signal,
+    })
       .then(async (r) => {
         const b = await r.json();
         if (!r.ok) throw Error(b.error);
@@ -187,13 +201,21 @@ export function Conversations({
         setHasMore(b.hasMore);
         setDetailError("");
       })
-      .catch((e) =>
+      .catch((e) => {
+        if (e instanceof DOMException && e.name === "AbortError") return;
+        if (requestId !== detailRequest.current) return;
         setDetailError(
           e instanceof TypeError
             ? "Não foi possível carregar as mensagens. Verifique sua conexão e tente novamente."
             : e.message,
-        ),
-      );
+        );
+      })
+      .finally(() => {
+        if (requestId !== detailRequest.current) return;
+        detailController.current = null;
+        detailRequestKey.current = "";
+        setDetailLoading(false);
+      });
   }, [selected, historyPage]);
   useEffect(() => {
     const timer = setTimeout(() => void loadList(), 200);
@@ -204,6 +226,9 @@ export function Conversations({
     void loadDetail();
     return () => {
       request.current++;
+      detailController.current?.abort();
+      detailController.current = null;
+      detailRequestKey.current = "";
     };
   }, [loadDetail]);
   useEffect(() => {
@@ -322,6 +347,7 @@ export function Conversations({
     setSelected(c.id);
     setHistoryPage(1);
     setMessages([]);
+    setDetailLoading(true);
     setDetail(c);
     setText("");
     setMenuOpen(false);
@@ -535,6 +561,11 @@ export function Conversations({
                 </div>
               </header>
               <div className="conversation-messages">
+                {detailLoading && messages.length === 0 && (
+                  <p className="conversation-loading" role="status">
+                    Carregando mensagens…
+                  </p>
+                )}
                 {hasMore && (
                   <button
                     className="conversation-history-button"
