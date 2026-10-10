@@ -76,7 +76,9 @@ export async function GET(request: Request) {
     return new Response(await data.arrayBuffer(), {
       headers: {
         "Content-Type": data.type,
-        "Cache-Control": "private, no-store",
+        // Logos change infrequently; a short private cache avoids another
+        // storage round-trip every time the same tenant prints a receipt.
+        "Cache-Control": "private, max-age=60, stale-while-revalidate=300",
         "X-Content-Type-Options": "nosniff",
       },
     });

@@ -31,10 +31,11 @@ export default async function Page({
       border_name_snapshot: string;
       quantity: number;
       unit_price_cents: number;
+      border_price_cents: number;
       observation: string;
     }>(
       db,
-      "select id,name_snapshot,size_name_snapshot,border_name_snapshot,quantity,unit_price_cents,observation from public.order_items where tenant_id=$1 and order_id=$2",
+      "select id,name_snapshot,size_name_snapshot,border_name_snapshot,quantity,unit_price_cents,border_price_cents,observation from public.order_items where tenant_id=$1 and order_id=$2",
       [ctx.tenantId, id],
     );
     return { order, items };
@@ -75,7 +76,15 @@ export default async function Page({
                 width={180}
                 height={90}
                 unoptimized
+                preload
                 alt={`Logotipo da ${ctx.tenantName}`}
+                style={{
+                  width: "auto",
+                  height: "auto",
+                  maxWidth: "46mm",
+                  maxHeight: "22mm",
+                  objectFit: "contain",
+                }}
               />
             )}
             <h2>{ctx.tenantName}</h2>
@@ -102,15 +111,25 @@ export default async function Page({
                   {item.quantity}x {item.size_name_snapshot}{" "}
                   {item.name_snapshot}
                 </strong>
+                <span>
+                  Pizza:{" "}
+                  {formatCurrency(
+                    item.quantity *
+                      Math.max(
+                        0,
+                        item.unit_price_cents - item.border_price_cents,
+                      ),
+                  )}
+                </span>
                 {item.border_name_snapshot && (
-                  <span>{item.border_name_snapshot}</span>
+                  <span>
+                    Borda: {item.border_name_snapshot} —{" "}
+                    {formatCurrency(item.quantity * item.border_price_cents)}
+                  </span>
                 )}
                 {settings?.show_observations && item.observation && (
                   <span>Observação: {item.observation}</span>
                 )}
-                <strong className="receipt-item-price">
-                  {formatCurrency(item.quantity * item.unit_price_cents)}
-                </strong>
               </div>
             ))}
           </section>
