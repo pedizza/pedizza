@@ -2492,14 +2492,20 @@ export async function processBotMessage(
               ),
             );
             if (order.payment_method_type === "pix_manual") {
-              const pix = await one<{ pix_key: string }>(
+              const pix = await one<{
+                pix_key: string;
+                description: string;
+              }>(
                 db,
-                "select pix_key from public.payment_methods where tenant_id=$1 and id=(select payment_method_id from public.orders where tenant_id=$1 and id=$2)",
+                "select pix_key,description from public.payment_methods where tenant_id=$1 and id=(select payment_method_id from public.orders where tenant_id=$1 and id=$2)",
                 [tenant, order.id],
               );
               reply = joinBlocks(
                 reply,
                 `Chave PIX: ${pix?.pix_key}`,
+                pix?.description?.trim()
+                  ? `Instruções para o pagamento:\n${pix.description.trim()}`
+                  : undefined,
                 "A equipe confirmará o recebimento.",
               );
             }
