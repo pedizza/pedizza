@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
   Settings2,
   Pizza,
@@ -38,10 +38,16 @@ export function ResourceManager({
   resourceKey,
   canEdit,
   canArchive,
+  initialData,
 }: {
   resourceKey: string;
   canEdit: boolean;
   canArchive: boolean;
+  initialData?: {
+    data: Row[];
+    total: number;
+    categories?: { id: string; name: string }[];
+  };
 }) {
   const resource = resources[resourceKey];
   const SectionIcon = [
@@ -67,7 +73,7 @@ export function ResourceManager({
   const [category, setCategory] = useState("");
   const [pricingMode, setPricingMode] = useState("neighborhood");
   const [categories, setCategories] = useState<{ id: string; name: string }[]>(
-    [],
+    initialData?.categories || [],
   );
   const [sizes, setSizes] = useState<
     (ProductSize & { rowId: string; price: string })[]
@@ -82,12 +88,12 @@ export function ResourceManager({
     );
     setDirty(true);
   }
-  const [data, setData] = useState<Row[]>([]),
-    [total, setTotal] = useState(0),
+  const [data, setData] = useState<Row[]>(initialData?.data || []),
+    [total, setTotal] = useState(initialData?.total || 0),
     [page, setPage] = useState(1),
     [query, setQuery] = useState(""),
     [search, setSearch] = useState(""),
-    [loading, setLoading] = useState(true),
+    [loading, setLoading] = useState(!initialData),
     [error, setError] = useState(""),
     [open, setOpen] = useState(false),
     [editing, setEditing] = useState<Row | null>(null),
@@ -97,6 +103,7 @@ export function ResourceManager({
     [remove, setRemove] = useState<Row | null>(null),
     [toggling, setToggling] = useState<string | null>(null),
     [dirty, setDirty] = useState(false);
+  const skipInitialLoad = useRef(initialData !== undefined);
   const load = useCallback(
     (signal?: AbortSignal) => {
       return fetch(
@@ -125,6 +132,10 @@ export function ResourceManager({
     [resourceKey, page, search, category],
   );
   useEffect(() => {
+    if (skipInitialLoad.current) {
+      skipInitialLoad.current = false;
+      return;
+    }
     const c = new AbortController();
     void load(c.signal);
     return () => c.abort();

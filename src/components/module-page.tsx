@@ -1,4 +1,4 @@
-import { archivePermission } from "@/lib/modules/service";
+import { archivePermission, listResource } from "@/lib/modules/service";
 import Link from "next/link";
 import { requirePage } from "@/lib/auth/context";
 import { resources } from "@/lib/modules/registry";
@@ -28,6 +28,8 @@ export async function ModulePage({
     : available[0].key;
   const resource = resources[key];
   const ctx = await requirePage(resource.read);
+  const initialData =
+    key === "horarios" ? undefined : await listResource(ctx, key, 1, "");
   const visibleTabs = tabs.filter(
     (t) => !resources[t.key] || ctx.permissions.includes(resources[t.key].read),
   );
@@ -53,7 +55,6 @@ export async function ModulePage({
                 className={`tab ${group === activeGroup ? "active" : ""}`}
                 aria-current={group === activeGroup ? "true" : undefined}
                 href={`?tab=${first.key}`}
-                prefetch={false}
               >
                 {group.label}
               </Link>
@@ -72,7 +73,6 @@ export async function ModulePage({
               aria-current={key === t.key ? "page" : undefined}
               key={t.key}
               href={t.href || `?tab=${t.key}`}
-              prefetch={false}
             >
               {t.label}
             </Link>
@@ -94,6 +94,7 @@ export async function ModulePage({
         <ResourceManager
           key={key}
           resourceKey={key}
+          initialData={initialData}
           canEdit={ctx.permissions.includes(resource.write)}
           canArchive={
             key !== "regras-precos" &&
